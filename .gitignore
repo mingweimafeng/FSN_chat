@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+dist/
+build/
+*.whl
+
+# Virtual environment
+venv/
+.env
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project runtime data (user-specific)
+chat_history.json
+memory_state.json
+app_settings.json
+
+# Large model files (download separately)
+GenieData/
+*.onnx
+*.bin
+
+# Temporary audio files
+tmp_audio/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Packaging output
+PACKAGING_GUIDE.md
+PROJECT_STRUCTURE.md
