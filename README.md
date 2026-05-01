@@ -59,7 +59,7 @@
 |------|------|
 | Python | 3.10+ |
 | DeepSeek API Key | [deepseek.com](https://platform.deepseek.com/) 申请 |
-| Genie TTS | 语音合成服务（可选） |
+| Genie TTS | 语音合成服务 | https://github.com/High-Logic/Genie-TTS |
 
 ### 安装步骤
 
