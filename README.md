@@ -228,6 +228,7 @@ FSN_chat/
 本项目仅用于学习和交流目的。
 - 角色版权归 **TYPE-MOON** 所有
 - AI 服务依赖 **DeepSeek API**
+  Deepseek API订阅: https://www.deepseek.com/en/
 - TTS 语音依赖 **Genie TTS**
 
 ---
