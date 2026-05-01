@@ -13,6 +13,10 @@
 
 项目使用 **DeepSeek API** 驱动 AI 对话，配合 **Genie TTS** 实现角色语音合成，并利用 **PySide6（Qt）** 构建全屏桌面界面，集成了角色立绘动画、场景切换、背景音乐、记忆系统等丰富的互动功能。
 
+<p align="center">
+  <img src="screenshot.png" alt="应用界面截图" width="700"/>
+</p>
+
 ---
 
 ## 功能特性
