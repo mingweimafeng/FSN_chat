@@ -171,7 +171,8 @@ class DialogueMixin:
             self.on_request_finished()
             return
 
-        system_prompt = self.settings.compose_system_prompt()
+        background_name = self.current_background_name() if hasattr(self, "current_background_name") else ""
+        system_prompt = self.settings.compose_system_prompt(background_name)
         self.request_thread = ChatRequestThread(
             user_text,
             system_prompt=system_prompt,

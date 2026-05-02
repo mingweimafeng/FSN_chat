@@ -8,7 +8,7 @@ from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import QApplication, QWidget
 
 from chat_app.audio.audio_manager import AudioManager
-from chat_app.audio.tts_client import GenieTTSClient, TtsSynthesisThread, TtsWarmupThread
+from chat_app.audio.tts_client import GenieTTSClient, TtsWarmupThread
 from chat_app.audio.tts_pipeline import TtsPipelineManager
 from chat_app.config import (
     ANIMATION_TICK_MS,
@@ -244,7 +244,11 @@ class BackgroundWindow(
         self.background_drawer.move(self.width(), 0)
         if self.backgrounds:
             saved = self.resolve_saved_background(self.settings.current_background)
-            self.set_background(saved or self.backgrounds[0], persist=False)
+            if saved is None:
+                saved = self.backgrounds[0]
+                self.set_background(saved, persist=True)
+            else:
+                self.set_background(saved, persist=False)
         self.background_drawer.set_current_background(self.current_background)
 
         self.refresh_character_portrait()

@@ -22,14 +22,16 @@ class AppSettings:
     api_key: str = ""
     current_background: str = ""
 
-    def compose_system_prompt(self) -> str:
-        return "\n".join(
-            [
-                self.role_prompt.strip(),
-                self.user_profile_prompt.strip(),
-                self.fixed_requirements_prompt.strip(),
-            ]
-        ).strip()
+    def compose_system_prompt(self, background_name: str = "") -> str:
+        parts = [
+            self.role_prompt.strip(),
+            self.user_profile_prompt.strip(),
+        ]
+        scene = (background_name or "").strip()
+        if scene:
+            parts.append(f"当前场景：{scene}")
+        parts.append(self.fixed_requirements_prompt.strip())
+        return "\n".join(part for part in parts if part).strip()
 
 
 @dataclass

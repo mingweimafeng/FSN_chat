@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QRect
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QCursor, QLinearGradient, QPainter, QPixmap
 from PySide6.QtWidgets import QMessageBox
 
@@ -22,6 +22,11 @@ class BackgroundMixin:
             if str(bg) == saved:
                 return bg
         return None
+
+    def current_background_name(self) -> str:
+        if not getattr(self, "current_background", None):
+            return ""
+        return Path(self.current_background).stem
 
     def refresh_scaled_background(self) -> None:
         if self.current_pixmap.isNull():

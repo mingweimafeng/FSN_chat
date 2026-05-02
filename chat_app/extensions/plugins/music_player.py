@@ -469,7 +469,7 @@ class MusicPlayerExtension(BaseExtension):
 
     def _on_volume_changed(self, value: int) -> None:
         if self._audio_output:
-            self._audio_output.setVolume(value / 100.0)
+            self._audio_output.setVolume(value / 100.0 * 0.6)
 
     def _toggle_play(self) -> None:
         if self._player is None:
