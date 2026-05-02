@@ -35,9 +35,12 @@ class CharacterMixin:
             if candidates:
                 n = len(candidates)
                 if n == 1:
+                    self.character_indices[emotion][state] = 0
                     return candidates[0]
-                last_index = self.character_indices[emotion][state]
+                last_index = self.character_indices.get(emotion, {}).get(state, -1)
                 available_indices = [i for i in range(n) if i != last_index]
+                if not available_indices:
+                    available_indices = list(range(n))
                 new_index = random.choice(available_indices)
                 self.character_indices[emotion][state] = new_index
                 return candidates[new_index]

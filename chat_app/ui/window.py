@@ -136,7 +136,7 @@ class BackgroundWindow(
     def _init_character_state(self) -> None:
         self.character_images = load_character_images(CHARACTER_DIR)
         self.character_indices = {
-            emotion: {state: 0 for state in STATE_TO_ASSET.values()}
+            emotion: {state: -1 for state in STATE_TO_ASSET.values()}
             for emotion in CHARACTER_EMOTIONS
         }
         self.character_emotion = "normal"

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import multiprocessing
 import os
 import socket
@@ -37,7 +36,7 @@ def _run_genie_server(host: str, port: int) -> None:
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
 
     if getattr(sys, "frozen", False):
-        genie_data = os.path.join(sys._MEIPASS, "GenieData")
+        genie_data = os.path.join(getattr(sys, "_MEIPASS", ""), "GenieData")
         os.environ["GENIE_DATA_DIR"] = genie_data
 
     _real_input = builtins.input
@@ -73,14 +72,14 @@ class GenieTTSClient:
         self.character_loaded = False
         self.current_reference_emotion = ""
 
-    def ensure_server_running(self, timeout_s: float = 10.0) -> None:
+    def ensure_server_running(self, timeout_s: float = 30.0) -> None:
         if self._is_server_ready():
             return
 
         if self.server_process is None or not self.server_process.is_alive():
             os.environ.setdefault("PYTHONIOENCODING", "utf-8")
             if getattr(sys, "frozen", False):
-                os.environ["GENIE_DATA_DIR"] = os.path.join(sys._MEIPASS, "GenieData")
+                os.environ["GENIE_DATA_DIR"] = os.path.join(getattr(sys, "_MEIPASS", ""), "GenieData")
             self.server_process = multiprocessing.Process(
                 target=_run_genie_server,
                 args=(GENIE_SERVER_HOST, GENIE_SERVER_PORT),
@@ -92,12 +91,14 @@ class GenieTTSClient:
         while time.time() - start < timeout_s:
             if self._is_server_ready():
                 return
+            if self.server_process is not None and not self.server_process.is_alive():
+                raise RuntimeError("Genie TTS server 启动失败，进程已退出。")
             time.sleep(0.2)
         raise RuntimeError("Genie TTS server 启动超时。")
 
-    def initialize(self) -> None:
+    def initialize(self, timeout_s: float = 30.0) -> None:
         TEMP_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
-        self.ensure_server_running()
+        self.ensure_server_running(timeout_s=timeout_s)
         if self.character_loaded:
             return
 
@@ -109,12 +110,26 @@ class GenieTTSClient:
         self._post_json("/load_character", payload)
         self.character_loaded = True
 
-    def synthesize_to_temp_file(self, text: str, emotion: str) -> Path:
+    def warmup(self, text: str = "テスト", emotion: str = "normal") -> None:
+        temp_path = self.synthesize_to_temp_file(text, emotion, ensure_initialized=False)
+        try:
+            pass
+        finally:
+            try:
+                if temp_path.exists():
+                    temp_path.unlink()
+            except Exception:
+                pass
+
+    def synthesize_to_temp_file(
+        self, text: str, emotion: str, ensure_initialized: bool = True
+    ) -> Path:
         content = text.strip()
         if not content:
             raise RuntimeError("空文本无法生成语音。")
 
-        self.initialize()
+        if ensure_initialized:
+            self.initialize()
         self._set_reference_audio(emotion)
 
         payload = {
@@ -249,6 +264,7 @@ class TtsWarmupThread(QThread):
     def run(self) -> None:
         try:
             self.client.initialize()
+            self.client.warmup()
             if not self._interrupted:
                 self.warmed_up.emit()
         except Exception as error:
