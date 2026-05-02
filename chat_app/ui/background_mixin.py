@@ -26,7 +26,11 @@ class BackgroundMixin:
     def current_background_name(self) -> str:
         if not getattr(self, "current_background", None):
             return ""
-        return Path(self.current_background).stem
+        stem = Path(self.current_background).stem
+        prefix = "卫宫家_"
+        if stem.startswith(prefix):
+            return stem[len(prefix) :]
+        return stem
 
     def refresh_scaled_background(self) -> None:
         if self.current_pixmap.isNull():
