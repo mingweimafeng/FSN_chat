@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any, Optional
 
 from PySide6.QtCore import (
     QEvent,
@@ -40,6 +41,17 @@ _SUPPORTED_EXTENSIONS = (".mp3", ".wav", ".flac")
 # ==============================================
 
 
+def _connect(signal: Any, slot) -> None:
+    signal.connect(slot)
+
+
+def _disconnect(signal: Any, slot) -> None:
+    try:
+        signal.disconnect(slot)
+    except (TypeError, RuntimeError):
+        pass
+
+
 class _EventFilter(QObject):
     """内部事件过滤器，转发事件到 MusicPlayerExtension 的回调。"""
 
@@ -51,25 +63,30 @@ class _EventFilter(QObject):
         ext = self._ext
 
         # 【修复冲突】：在音乐播放器范围内有任何鼠标动作，强行唤醒被隐藏的光标
-        if event.type() in (QEvent.MouseMove, QEvent.HoverMove, QEvent.Enter, QEvent.MouseButtonPress):
+        if event.type() in (
+            QEvent.Type.MouseMove,
+            QEvent.Type.HoverMove,
+            QEvent.Type.Enter,
+            QEvent.Type.MouseButtonPress,
+        ):
             while QApplication.overrideCursor() is not None:
                 QApplication.restoreOverrideCursor()
 
         if obj is ext._parent_widget:
-            if event.type() == QEvent.Resize:
+            if event.type() == QEvent.Type.Resize:
                 ext._recenter()
             return False
 
         if obj is ext._trigger_zone:
-            if event.type() == QEvent.Enter:
+            if event.type() == QEvent.Type.Enter:
                 ext._trigger_timer.stop()
                 ext._trigger_timer.start(_TRIGGER_DELAY_MS)
             return False
 
         if obj is ext._drawer:
-            if event.type() == QEvent.Enter:
+            if event.type() == QEvent.Type.Enter:
                 ext._hide_timer.stop()
-            elif event.type() == QEvent.Leave:
+            elif event.type() == QEvent.Type.Leave:
                 # 【修复痛点 1】：如果歌单菜单是打开的，不允许抽屉收回
                 if ext._playlist_menu and ext._playlist_menu.isVisible():
                     pass
@@ -78,14 +95,14 @@ class _EventFilter(QObject):
             return False
 
         if obj is ext._playlist_menu:
-            if event.type() == QEvent.Leave:
+            if event.type() == QEvent.Type.Leave:
                 ext._playlist_menu.setVisible(False)
                 # 歌单关闭后，检查鼠标是否还在抽屉里，不在则开始收回倒计时
                 drawer_rect = ext._drawer.rect()
                 drawer_rect.moveTo(ext._drawer.mapToGlobal(QPoint(0, 0)))
                 if not drawer_rect.contains(QCursor.pos()):
                     ext._hide_timer.start(_HIDE_DELAY_MS)
-            elif event.type() == QEvent.Enter:
+            elif event.type() == QEvent.Type.Enter:
                 ext._hide_timer.stop()
             return False
 
@@ -101,34 +118,34 @@ class MusicPlayerExtension(BaseExtension):
 
     def __init__(self) -> None:
         super().__init__()
-        self._parent_widget: QWidget | None = None
-        self._player: QMediaPlayer | None = None
-        self._audio_output: QAudioOutput | None = None
+        self._parent_widget: Optional[QWidget] = None
+        self._player: Optional[QMediaPlayer] = None
+        self._audio_output: Optional[QAudioOutput] = None
         self._playlist: list[Path] = []
         self._current_index: int = -1
         self._slider_dragging: bool = False
 
-        self._drawer: QWidget | None = None
-        self._trigger_zone: QWidget | None = None
-        self._playlist_menu: QListWidget | None = None
-        self._slide_anim: QPropertyAnimation | None = None
-        self._hide_timer: QTimer | None = None
-        self._trigger_timer: QTimer | None = None
+        self._drawer: Optional[QWidget] = None
+        self._trigger_zone: Optional[QWidget] = None
+        self._playlist_menu: Optional[QListWidget] = None
+        self._slide_anim: Optional[QPropertyAnimation] = None
+        self._hide_timer: Optional[QTimer] = None
+        self._trigger_timer: Optional[QTimer] = None
 
-        self._play_btn: QPushButton | None = None
-        self._prev_btn: QPushButton | None = None
-        self._next_btn: QPushButton | None = None
-        self._menu_btn: QPushButton | None = None
-        self._title_label: QLabel | None = None
-        
-        self._progress_slider: QSlider | None = None
-        self._time_cur_label: QLabel | None = None
-        self._time_tot_label: QLabel | None = None
-        
-        self._vol_slider: QSlider | None = None
-        self._drawer_content: QWidget | None = None
+        self._play_btn: Optional[QPushButton] = None
+        self._prev_btn: Optional[QPushButton] = None
+        self._next_btn: Optional[QPushButton] = None
+        self._menu_btn: Optional[QPushButton] = None
+        self._title_label: Optional[QLabel] = None
+
+        self._progress_slider: Optional[QSlider] = None
+        self._time_cur_label: Optional[QLabel] = None
+        self._time_tot_label: Optional[QLabel] = None
+
+        self._vol_slider: Optional[QSlider] = None
+        self._drawer_content: Optional[QWidget] = None
         self._is_showing: bool = False
-        self._event_filter: _EventFilter | None = None
+        self._event_filter: Optional[_EventFilter] = None
 
     def on_start(self) -> None:
         self._parent_widget = self._context.get_main_widget() if self._context else None
@@ -146,9 +163,9 @@ class MusicPlayerExtension(BaseExtension):
         # 默认音量 50%
         self._audio_output.setVolume(0.5)
 
-        self._player.mediaStatusChanged.connect(self._on_media_status_changed)
-        self._player.positionChanged.connect(self._on_position_changed)
-        self._player.durationChanged.connect(self._on_duration_changed)
+        _connect(self._player.mediaStatusChanged, self._on_media_status_changed)
+        _connect(self._player.positionChanged, self._on_position_changed)
+        _connect(self._player.durationChanged, self._on_duration_changed)
 
         self._build_drawer(self._parent_widget)
         self._build_trigger_zone(self._parent_widget)
@@ -156,11 +173,11 @@ class MusicPlayerExtension(BaseExtension):
 
         self._hide_timer = QTimer(self._drawer)
         self._hide_timer.setSingleShot(True)
-        self._hide_timer.timeout.connect(self._slide_up)
+        _connect(self._hide_timer.timeout, self._slide_up)
 
         self._trigger_timer = QTimer(self._drawer)
         self._trigger_timer.setSingleShot(True)
-        self._trigger_timer.timeout.connect(self._slide_down)
+        _connect(self._trigger_timer.timeout, self._slide_down)
 
     def on_stop(self) -> None:
         if self._player:
@@ -230,11 +247,11 @@ class MusicPlayerExtension(BaseExtension):
         self._next_btn = QPushButton("⏭")
         for btn in (self._prev_btn, self._play_btn, self._next_btn):
             btn.setFixedSize(36, 36)
-            btn.setCursor(Qt.PointingHandCursor)
-            
-        self._prev_btn.clicked.connect(self._play_previous)
-        self._play_btn.clicked.connect(self._toggle_play)
-        self._next_btn.clicked.connect(self._play_next)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        _connect(self._prev_btn.clicked, self._play_previous)
+        _connect(self._play_btn.clicked, self._toggle_play)
+        _connect(self._next_btn.clicked, self._play_next)
 
         main_layout.addWidget(self._prev_btn)
         main_layout.addWidget(self._play_btn)
@@ -246,8 +263,8 @@ class MusicPlayerExtension(BaseExtension):
         
         self._title_label = QLabel("暂无播放")
         self._title_label.setObjectName("MusicTitle")
-        self._title_label.setAlignment(Qt.AlignCenter)
-        
+        self._title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
         progress_layout = QHBoxLayout()
         progress_layout.setSpacing(6)
         self._time_cur_label = QLabel("00:00")
@@ -255,12 +272,12 @@ class MusicPlayerExtension(BaseExtension):
         self._time_cur_label.setObjectName("TimeLabel")
         self._time_tot_label.setObjectName("TimeLabel")
         
-        self._progress_slider = QSlider(Qt.Horizontal)
+        self._progress_slider = QSlider(Qt.Orientation.Horizontal)
         self._progress_slider.setRange(0, 0)
-        self._progress_slider.setCursor(Qt.PointingHandCursor)
-        self._progress_slider.sliderPressed.connect(self._on_slider_pressed)
-        self._progress_slider.sliderReleased.connect(self._on_slider_released)
-        self._progress_slider.sliderMoved.connect(self._on_slider_moved)
+        self._progress_slider.setCursor(Qt.CursorShape.PointingHandCursor)
+        _connect(self._progress_slider.sliderPressed, self._on_slider_pressed)
+        _connect(self._progress_slider.sliderReleased, self._on_slider_released)
+        _connect(self._progress_slider.sliderMoved, self._on_slider_moved)
 
         progress_layout.addWidget(self._time_cur_label)
         progress_layout.addWidget(self._progress_slider, 1)
@@ -274,18 +291,18 @@ class MusicPlayerExtension(BaseExtension):
         vol_icon = QLabel("🔊")
         vol_icon.setStyleSheet("color: white; font-size: 16px;")
         
-        self._vol_slider = QSlider(Qt.Horizontal)
+        self._vol_slider = QSlider(Qt.Orientation.Horizontal)
         self._vol_slider.setObjectName("VolumeSlider")
         self._vol_slider.setRange(0, 100)
         self._vol_slider.setValue(50)
         self._vol_slider.setFixedWidth(60)
-        self._vol_slider.setCursor(Qt.PointingHandCursor)
-        self._vol_slider.valueChanged.connect(self._on_volume_changed)
+        self._vol_slider.setCursor(Qt.CursorShape.PointingHandCursor)
+        _connect(self._vol_slider.valueChanged, self._on_volume_changed)
 
         self._menu_btn = QPushButton("☰")
         self._menu_btn.setFixedSize(36, 36)
-        self._menu_btn.setCursor(Qt.PointingHandCursor)
-        self._menu_btn.clicked.connect(self._toggle_playlist)
+        self._menu_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        _connect(self._menu_btn.clicked, self._toggle_playlist)
 
         main_layout.addWidget(vol_icon)
         main_layout.addWidget(self._vol_slider)
@@ -354,7 +371,7 @@ class MusicPlayerExtension(BaseExtension):
         # 【优化痛点】：更短的时间，更顺滑的阻尼曲线
         self._slide_anim = QPropertyAnimation(self._drawer, b"pos")
         self._slide_anim.setDuration(150)
-        self._slide_anim.setEasingCurve(QEasingCurve.OutQuad)
+        self._slide_anim.setEasingCurve(QEasingCurve.Type.OutQuad)
         self._slide_anim.setStartValue(self._drawer.pos())
         self._slide_anim.setEndValue(self._drawer.pos())
 
@@ -365,7 +382,7 @@ class MusicPlayerExtension(BaseExtension):
         self._trigger_zone = QWidget(parent)
         self._trigger_zone.setObjectName("MusicPlayerTrigger")
         self._trigger_zone.setGeometry(x, 0, _DRAWER_WIDTH, _TRIGGER_ZONE_HEIGHT)
-        self._trigger_zone.setAttribute(Qt.WA_TransparentForMouseEvents, False)
+        self._trigger_zone.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, False)
         self._trigger_zone.setStyleSheet("background-color: transparent;")
         self._trigger_zone.installEventFilter(self._event_filter)
         self._trigger_zone.setVisible(True)
@@ -374,7 +391,7 @@ class MusicPlayerExtension(BaseExtension):
     def _build_playlist_menu(self, parent: QWidget) -> None:
         self._playlist_menu = QListWidget(parent)
         self._playlist_menu.setObjectName("MusicPlayerPlaylist")
-        self._playlist_menu.setWindowFlags(Qt.FramelessWindowHint | Qt.Tool)
+        self._playlist_menu.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Tool)
         self._playlist_menu.setStyleSheet("""
             QListWidget {
                 background-color: rgba(30, 30, 40, 240);
@@ -397,13 +414,13 @@ class MusicPlayerExtension(BaseExtension):
                 font-weight: bold;
             }
         """)
-        self._playlist_menu.itemDoubleClicked.connect(self._on_playlist_item_activated)
+        _connect(self._playlist_menu.itemDoubleClicked, self._on_playlist_item_activated)
         self._playlist_menu.setVisible(False)
         self._playlist_menu.installEventFilter(self._event_filter)
 
         for song in self._playlist:
             item = QListWidgetItem(song.stem)
-            item.setData(Qt.UserRole, str(song))
+            item.setData(Qt.ItemDataRole.UserRole, str(song))
             self._playlist_menu.addItem(item)
 
     def _slide_down(self) -> None:
@@ -420,7 +437,7 @@ class MusicPlayerExtension(BaseExtension):
         self._slide_anim.setEndValue(QPoint(x, 0))
         
         try:
-            self._slide_anim.finished.disconnect(self._on_slide_up_finished)
+            _disconnect(self._slide_anim.finished, self._on_slide_up_finished)
         except (TypeError, RuntimeError):
             pass
             
@@ -440,11 +457,11 @@ class MusicPlayerExtension(BaseExtension):
         self._slide_anim.setEndValue(QPoint(x, target_y))
         
         try:
-            self._slide_anim.finished.disconnect(self._on_slide_up_finished)
+            _disconnect(self._slide_anim.finished, self._on_slide_up_finished)
         except (TypeError, RuntimeError):
             pass
-        self._slide_anim.finished.connect(self._on_slide_up_finished)
-        
+        _connect(self._slide_anim.finished, self._on_slide_up_finished)
+
         self._slide_anim.start()
 
     def _on_slide_up_finished(self) -> None:
@@ -457,7 +474,7 @@ class MusicPlayerExtension(BaseExtension):
     def _toggle_play(self) -> None:
         if self._player is None:
             return
-        if self._player.playbackState() == QMediaPlayer.PlayingState:
+        if self._player.playbackState() == QMediaPlayer.PlaybackState.PlayingState:
             self._player.pause()
             self._play_btn.setText("▶")
         else:
@@ -498,7 +515,7 @@ class MusicPlayerExtension(BaseExtension):
         self._time_tot_label.setText("00:00")
 
     def _on_media_status_changed(self, status) -> None:
-        if status == QMediaPlayer.EndOfMedia:
+        if status == QMediaPlayer.MediaStatus.EndOfMedia:
             self._play_next()
 
     def _on_position_changed(self, pos_ms: int) -> None:
@@ -559,7 +576,7 @@ class MusicPlayerExtension(BaseExtension):
         self._playlist_menu.raise_()
 
     def _on_playlist_item_activated(self, item: QListWidgetItem) -> None:
-        path_str = item.data(Qt.UserRole)
+        path_str = item.data(Qt.ItemDataRole.UserRole)
         for i, p in enumerate(self._playlist):
             if str(p) == path_str:
                 self._current_index = i
@@ -574,7 +591,7 @@ class MusicPlayerExtension(BaseExtension):
             return
         for i in range(self._playlist_menu.count()):
             item = self._playlist_menu.item(i)
-            path_str = item.data(Qt.UserRole)
+            path_str = item.data(Qt.ItemDataRole.UserRole)
             if self._current_index >= 0 and self._current_index < len(self._playlist):
                 if str(self._playlist[self._current_index]) == path_str:
                     self._playlist_menu.setCurrentItem(item)

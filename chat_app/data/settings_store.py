@@ -105,9 +105,13 @@ class MemoryStateStore(_BaseStore):
 
     def load(self) -> MemoryState:
         payload = self._read_payload(self.file_path)
+        try:
+            turns_since_summary = max(0, int(payload.get("memory_turns_since_summary", 0) or 0))
+        except (TypeError, ValueError):
+            turns_since_summary = 0
         return MemoryState(
             last_summary=str(payload.get("memory_last_summary", "")).strip(),
-            turns_since_summary=max(0, int(payload.get("memory_turns_since_summary", 0) or 0)),
+            turns_since_summary=turns_since_summary,
         )
 
     def save(self, state: MemoryState) -> None:
