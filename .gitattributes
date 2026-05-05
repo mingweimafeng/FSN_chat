@@ -1,0 +1,2 @@
+characters/Saber/audio_package/onnx_model/*.bin filter=lfs diff=lfs merge=lfs -text
+characters/Saber/audio_package/onnx_model/*.onnx filter=lfs diff=lfs merge=lfs -text
