@@ -11,7 +11,7 @@
 
 **FSN_chat** 是一款基于 《Fate/stay Night》 的桌面 AI 聊天应用。你可以在电脑上与**Saber（阿尔托莉雅·潘德拉贡）** 进行实时对话，体验身临其境的视觉小说风格交互。
 
-项目使用 **DeepSeek API** 驱动 AI 对话，配合 **Genie TTS** 实现角色语音合成，并利用 **PySide6（Qt）** 构建全屏桌面界面，集成了角色立绘动画、场景切换、背景音乐、记忆系统等丰富的互动功能。
+项目使用 **DeepSeek API** 驱动 AI 对话，配合 **Genie TTS** 实现角色语音合成，并利用 **PySide6（Qt）** 构建全屏桌面界面，集成了角色立绘动画、换装系统、场景切换、背景音乐、记忆系统等丰富的互动功能。
 
 <p align="center">
   <img src="screenshot.png" alt="应用界面截图" width="700"/>
@@ -25,18 +25,24 @@
 - **AI 对话** — 基于 DeepSeek API，Saber 角色严格遵守《Fate/stay Night》原作人设，语气端庄威严
 - **日文同步** — 每次对话附带日文翻译，感受原作氛围
 - **流式文字渲染** — 打字机效果逐字显示，配合光标闪烁
-- **情绪系统** — 8 种情绪状态（normal / happy / angry / shy / flustered / embarrassed / speechless / serious），根据对话内容自动切换立绘表情
+- **情绪系统** — 11 种情绪状态（normal / happy / angry / shy / flustered / embarrassed / speechless / serious / shocked / worried / disguested），根据对话内容自动切换立绘表情
 
 ### 视觉体验
 - **全屏沉浸界面** — 可切换全屏模式，自动缩放适配
 - **多场景背景** — 卫宫家场景（卧室、客厅、道场、院子等），随机切换
-- **角色立绘动画** — 包含站立、对话、听讲等多种姿态，支持淡入淡出过渡
+- **换装系统** — 支持便服（Casual）和战斗服（Servant）等多套装束，右键菜单一键切换，立绘自动重新分类索引
+- **角色立绘动画** — 包含站立、对话、听讲等多种姿态，支持淡入淡出过渡，同一情绪同一姿态有多张立绘时随机选取避免重复
 - **全局遮罩** — 半透明黑色遮罩增强文字可读性
 
 ### 语音系统
 - **Genie TTS 合成** — 基于 ONNX 模型的日文语音合成
-- **多种参考音频** — 支持 angry / happy / shy / serious 等多种语气
+- **多种参考音频** — 支持 normal / happy / angry / shy / flustered / embarrassed / speechless / serious 等多种语气，情绪自动匹配参考音
 - **自动语音播放** — 对话自动触发语音合成与播放
+
+### 收藏夹
+- **收藏对话** — 右键菜单收藏喜欢的对话片段，自动保存语音音频
+- **语音回放** — 收藏夹列表展示收藏内容，支持点击回放对应语音
+- **持久化存储** — 收藏数据保存为 `favorites.json`，音频文件保存在 `favorites_audio/` 目录
 
 ### 记忆与上下文
 - **二级记忆系统**：
@@ -47,6 +53,7 @@
 ### 扩展系统
 - **插件架构** — 动态发现和加载插件
 - **音乐播放器** — 内置 BGM 播放器，鼠标悬停顶部自动滑出
+- **收藏夹扩展** — 收藏对话及语音，支持列表展示与回放
 - **光标隐藏** — 闲置自动隐藏鼠标光标
 
 ---
@@ -122,10 +129,11 @@ FSN_chat/
 ├── requirements.txt                # Python 依赖
 ├── run.bat                         # Windows 快捷启动
 ├── Saber.ico                       # 应用图标
+├── favorites.json                  # 收藏夹数据
 │
 ├── chat_app/                       # 核心应用包
 │   ├── main.py                     # 应用启动逻辑（日志、资源检查）
-│   ├── config.py                   # 全局配置常量
+│   ├── config.py                   # 全局配置常量（情绪列表、路径等）
 │   │
 │   ├── audio/                      # 语音模块
 │   │   ├── audio_manager.py        # 音频播放管理
@@ -147,6 +155,7 @@ FSN_chat/
 │   │   ├── manager.py              # 插件动态加载器
 │   │   └── plugins/
 │   │       ├── music_player.py     # 音乐播放器插件
+│   │       ├── favorites.py        # 收藏夹插件
 │   │       └── cursor_idle_hider.py # 光标隐藏插件
 │   │
 │   ├── services/                   # 外部服务
@@ -171,13 +180,26 @@ FSN_chat/
 ├── characters/
 │   └── Saber/                      # Saber 角色资源
 │       ├── prompt_Saber.txt        # 角色提示词
-│       ├── Casual/                 # 便服立绘
-│       ├── Servant/                # 战斗服立绘
+│       ├── dress/                  # 服装立绘（情绪/状态目录结构）
+│       │   ├── Casual/             # 便服立绘
+│       │   │   ├── normal/idle, listen, react, talk
+│       │   │   ├── happy/idle, listen, react, talk
+│       │   │   ├── angry/idle, listen, react, talk
+│       │   │   ├── shy/idle, listen, react, talk
+│       │   │   ├── flustered/idle, listen, react, talk
+│       │   │   ├── embarrassed/idle, listen, react, talk
+│       │   │   ├── speechless/idle, react, talk
+│       │   │   ├── serious/idle, listen, react, talk
+│       │   │   ├── shocked/idle, react, talk
+│       │   │   └── worried/idle, react, talk
+│       │   ├── Servant/            # 战斗服立绘（相同目录结构）
+│       │   └── Misc/               # 其他立绘
 │       └── audio_package/          # 语音合成资源
 │           ├── onnx_model/         # ONNX 模型文件
-│           └── reference_audio/    # 参考音频（多种情绪）
+│           └── reference_audio/    # 参考音频（8 种情绪）
 │
 ├── music/                          # BGM 音乐文件
+├── favorites_audio/                # 收藏语音文件
 └── GenieData/                      # Genie TTS 模型数据（首次启动下载）
 ```
 
@@ -192,8 +214,13 @@ FSN_chat/
 | 输入文字 | 底部输入框，按 Enter 发送 |
 | 切换全屏 | 快捷键 `F11` |
 | 切换背景 | 快捷键 `B` 或通过菜单切换 |
+| 切换服装 | 右键菜单 → 服装 → 选择套装（Casual / Servant 等） |
 | BGM 播放器 | 鼠标移至窗口顶部边缘，播放器自动滑出 |
+| 收藏对话 | 右键菜单 → 收藏夹 → 收藏当前对话 |
+| 查看收藏 | 右键菜单 → 收藏夹 → 打开收藏夹 |
 | 查看历史 | 菜单栏 → 历史记录 |
+| 清屏 | 右键菜单 → 清屏 |
+| 刷新立绘 | 右键菜单 → 刷新 |
 | 应用设置 | 菜单栏 → 设置（配置 API Key 等） |
 
 ### 对话技巧
@@ -220,6 +247,7 @@ FSN_chat/
 - **状态机驱动**：`idle → thinking → speaking` 三态流转，管理交互节奏
 - **Mixin 模式**：主窗口通过多重继承组合各功能模块（背景、角色、文字、音频等）
 - **插件架构**：`ExtensionManager` 自动扫描 `plugins` 包，动态加载扩展
+- **服装系统**：基于 `dress/` 目录情绪/状态子文件夹自动索引，运行时切换无需重启
 
 ---
 
