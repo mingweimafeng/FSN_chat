@@ -11,7 +11,7 @@
 
 **FSN_chat** 是一款基于 《Fate/stay Night》 的桌面 AI 聊天应用。你可以在电脑上与**Saber（阿尔托莉雅·潘德拉贡）** 进行实时对话，体验身临其境的视觉小说风格交互。
 
-项目使用 **DeepSeek API** 驱动 AI 对话，配合 **Genie TTS** 实现角色语音合成，并利用 **PySide6（Qt）** 构建全屏桌面界面，集成了角色立绘动画、换装系统、场景切换、背景音乐、记忆系统等丰富的互动功能。
+项目使用 **OpenAI 兼容 API** 驱动 AI 对话（支持 DeepSeek / OpenAI / 阿里通义千问 / 智谱 GLM / 月之暗面 Moonshot / 硅基流动 SiliconFlow 等多种厂商，也可自定义接入），配合 **Genie TTS** 实现角色语音合成，并利用 **PySide6（Qt）** 构建全屏桌面界面，集成了角色立绘动画、换装系统、场景切换、背景音乐、记忆系统等丰富的互动功能。
 
 <p align="center">
   <img src="screenshot.png" alt="应用界面截图" width="700"/>
@@ -22,7 +22,7 @@
 ## 功能特性
 
 ### 核心交互
-- **AI 对话** — 基于 DeepSeek API，Saber 角色严格遵守《Fate/stay Night》原作人设，语气端庄威严
+- **AI 对话** — 基于 OpenAI 兼容 API（支持 DeepSeek / OpenAI / 阿里通义千问 / 智谱 GLM / 月之暗面 Moonshot / 硅基流动 SiliconFlow 等多种厂商，亦可自定义接入），Saber 角色严格遵守《Fate/stay Night》原作人设，语气端庄威严
 - **日文同步** — 每次对话附带日文翻译，感受原作氛围
 - **流式文字渲染** — 打字机效果逐字显示，配合光标闪烁
 - **情绪系统** — 11 种情绪状态（normal / happy / angry / shy / flustered / embarrassed / speechless / serious / shocked / worried / disguested），根据对话内容自动切换立绘表情
@@ -65,7 +65,7 @@
 | 依赖 | 说明 |
 |------|------|
 | Python | 3.10+ |
-| DeepSeek API Key | [deepseek.com](https://platform.deepseek.com/) 申请 |
+| API Key | 任意 OpenAI 兼容 API 的密钥（见下方支持的厂商列表） |
 | Genie TTS | 语音合成服务 | https://github.com/High-Logic/Genie-TTS |
 
 ### 安装步骤
@@ -95,13 +95,27 @@ pip install -r requirements.txt
 
 4. **配置 API 密钥**
 
-   - 方式一：设置环境变量
+   应用支持以下 AI 服务厂商，在设置界面中选择对应厂商并填写 API Key 即可：
 
-```bash
-set DEEPSEEK_API_KEY=your_api_key_here
-```
+   | 厂商 | 默认模型 | 官网 |
+   |------|----------|------|
+   | DeepSeek | `deepseek-chat` | [platform.deepseek.com](https://platform.deepseek.com/) |
+   | OpenAI | `gpt-4o` | [platform.openai.com](https://platform.openai.com/) |
+   | 阿里通义千问 (DashScope) | `qwen-plus` | [dashscope.aliyun.com](https://dashscope.aliyun.com/) |
+   | 智谱 GLM | `glm-4-plus` | [open.bigmodel.cn](https://open.bigmodel.cn/) |
+   | 月之暗面 Moonshot | `moonshot-v1-8k` | [platform.moonshot.cn](https://platform.moonshot.cn/) |
+   | 硅基流动 SiliconFlow | `deepseek-ai/DeepSeek-V3` | [siliconflow.cn](https://siliconflow.cn/) |
+   | 自定义 | 任意 OpenAI 兼容 API | — |
 
-   - 方式二：启动后在应用设置界面中填写
+   配置方式：
+
+   - 方式一：设置环境变量（以 DeepSeek 为例）
+
+   ```bash
+   set API_KEY=your_api_key_here
+   ```
+
+   - 方式二：启动后在菜单栏 → 设置界面中选择厂商、填写 API Key 及自定义 Base URL / 模型名称
 
 5. **下载 Genie TTS 模型（可选，需要语音功能）**
 
@@ -159,7 +173,7 @@ FSN_chat/
 │   │       └── cursor_idle_hider.py # 光标隐藏插件
 │   │
 │   ├── services/                   # 外部服务
-│   │   ├── api_client.py           # DeepSeek API 客户端
+│   │   ├── api_client.py           # OpenAI 兼容 API 客户端（多厂商）
 │   │   └── response_parser.py      # 响应解析器
 │   │
 │   └── ui/                         # 用户界面
@@ -192,7 +206,7 @@ FSN_chat/
 │       │   │   ├── serious/idle, listen, react, talk
 │       │   │   ├── shocked/idle, react, talk
 │       │   │   └── worried/idle, react, talk
-│       │   ├── Servant/            # 战斗服立绘（相同目录结构）
+│       │   ├── Servant/            # 战斗服立绘
 │       │   └── Misc/               # 其他立绘
 │       └── audio_package/          # 语音合成资源
 │           ├── onnx_model/         # ONNX 模型文件
@@ -235,7 +249,7 @@ FSN_chat/
 ## 技术架构
 
 ```
-用户输入 → DeepSeek API → JSON 响应
+用户输入 → AI API（多厂商支持） → JSON 响应
                               ├── reply → 文字渲染（打字机效果）
                               ├── emotion → 切换角色立绘
                               ├── narration → 旁白显示
@@ -255,8 +269,7 @@ FSN_chat/
 
 本项目仅用于学习和交流目的。
 - 角色版权归 **TYPE-MOON** 所有
-- AI 服务依赖 **DeepSeek API**
-  Deepseek API订阅: https://www.deepseek.com/en/
+- AI 服务依赖各厂商 API，使用时请遵守各厂商的使用条款
 - TTS 语音依赖 **Genie TTS**
 
 ---
@@ -264,6 +277,6 @@ FSN_chat/
 ## 致谢
 
 - [Fate/stay Night](https://typemoon.com/) — TYPE-MOON 的经典作品
-- [DeepSeek](https://deepseek.com/) — AI 对话引擎
+- [DeepSeek](https://deepseek.com/) / [OpenAI](https://openai.com/) / [阿里通义千问](https://tongyi.aliyun.com/) / [智谱 GLM](https://zhipuai.cn/) / [月之暗面 Moonshot](https://moonshot.cn/) / [硅基流动 SiliconFlow](https://siliconflow.cn/) — AI 对话引擎
 - [Genie TTS](https://github.com/AiuniAI/Genie-TTS) — 语音合成
 - [PySide6](https://doc.qt.io/qtforpython/) — Qt for Python 框架
