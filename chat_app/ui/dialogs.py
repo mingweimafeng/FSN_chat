@@ -5,6 +5,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QHBoxLayout,
     QLabel,
@@ -19,9 +20,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from chat_app.config import DEFAULT_ROLE_PROMPT, DEFAULT_USER_PROFILE_PROMPT
+from chat_app.config import DEFAULT_ROLE_PROMPT, DEFAULT_USER_PROFILE_PROMPT, PROVIDERS
 from chat_app.data.history_store import ChatHistoryStore, HistoryRecord
 from chat_app.data.settings_store import AppSettings, SettingsStore
+from chat_app.extensions.plugins.favorites import FavoritesStore
 
 
 class HistoryDialog(QDialog):
@@ -35,6 +37,8 @@ class HistoryDialog(QDialog):
         self.store = store
         self.settings_store = settings_store or SettingsStore()
         self.records: list[HistoryRecord] = []
+
+        self._fav_store = FavoritesStore()
 
         self.setWindowTitle("历史记录")
         self.resize(760, 520)
@@ -68,17 +72,19 @@ class HistoryDialog(QDialog):
         self.detail_box.setReadOnly(True)
 
         btn_row = QHBoxLayout()
+        self.favorite_btn = QPushButton("收藏", self)
         self.delete_selected_btn = QPushButton("删除选中", self)
         self.delete_hour_btn = QPushButton("按小时删除", self)
         self.delete_date_btn = QPushButton("按日期删除", self)
         self.refresh_btn = QPushButton("刷新", self)
 
+        self.favorite_btn.clicked.connect(self.favorite_selected_record)
         self.delete_selected_btn.clicked.connect(self.delete_selected_record)
         self.delete_hour_btn.clicked.connect(self.delete_by_selected_hour)
         self.delete_date_btn.clicked.connect(self.delete_by_selected_date)
         self.refresh_btn.clicked.connect(self.reload)
 
-        for btn in (self.delete_selected_btn, self.delete_hour_btn, self.delete_date_btn, self.refresh_btn):
+        for btn in (self.favorite_btn, self.delete_selected_btn, self.delete_hour_btn, self.delete_date_btn, self.refresh_btn):
             btn_row.addWidget(btn)
 
         right_layout.addWidget(self.detail_box)
@@ -167,6 +173,21 @@ class HistoryDialog(QDialog):
                 return record
         return None
 
+    def favorite_selected_record(self) -> None:
+        item = self.tree.currentItem()
+        if item is None:
+            return
+        payload = item.data(0, Qt.UserRole) or {}
+        if payload.get("level") != "record":
+            QMessageBox.information(self, "提示", "请先选中具体记录再收藏。")
+            return
+        record_id = str(payload.get("id", "")).strip()
+        record = self.find_record(record_id)
+        if record is None:
+            return
+        self._fav_store.add(record.reply_text)
+        QMessageBox.information(self, "提示", "已收藏。")
+
     def delete_selected_record(self) -> None:
         item = self.tree.currentItem()
         if item is None:
@@ -236,7 +257,7 @@ class SettingsDialog(QDialog):
     def __init__(self, settings: AppSettings, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setWindowTitle("设置")
-        self.resize(760, 560)
+        self.resize(760, 640)
 
         self.original_fixed_requirements_prompt = settings.fixed_requirements_prompt
         self.role_edit = QPlainTextEdit(self)
@@ -245,13 +266,43 @@ class SettingsDialog(QDialog):
         self.api_key_edit.setEchoMode(QLineEdit.Password)
         self.api_key_edit.setPlaceholderText("请输入 API 密钥")
 
+        self.provider_combo = QComboBox(self)
+        provider_keys = list(PROVIDERS.keys())
+        self._provider_keys = provider_keys
+        for key in provider_keys:
+            self.provider_combo.addItem(PROVIDERS[key]["name"], key)
+        self.provider_combo.currentIndexChanged.connect(self._on_provider_changed)
+
+        self.api_base_url_edit = QLineEdit(self)
+        self.api_base_url_edit.setPlaceholderText("API Base URL（选择厂商后自动填充，可手动修改）")
+
+        self.api_model_edit = QLineEdit(self)
+        self.api_model_edit.setPlaceholderText("模型名称（选择厂商后自动填充，可手动修改）")
+
         self.role_edit.setPlainText(settings.role_prompt)
         self.user_profile_edit.setPlainText(settings.user_profile_prompt)
         self.api_key_edit.setText(settings.api_key)
 
+        idx = self.provider_combo.findData(settings.provider)
+        if idx >= 0:
+            self.provider_combo.setCurrentIndex(idx)
+        else:
+            self.provider_combo.setCurrentIndex(0)
+
+        if settings.api_base_url:
+            self.api_base_url_edit.setText(settings.api_base_url)
+        if settings.api_model:
+            self.api_model_edit.setText(settings.api_model)
+
         root = QVBoxLayout(self)
         root.addWidget(QLabel("API 密钥", self))
         root.addWidget(self.api_key_edit)
+        root.addWidget(QLabel("API 厂商", self))
+        root.addWidget(self.provider_combo)
+        root.addWidget(QLabel("API Base URL（可手动修改）", self))
+        root.addWidget(self.api_base_url_edit)
+        root.addWidget(QLabel("模型名称（可手动修改）", self))
+        root.addWidget(self.api_model_edit)
         root.addWidget(QLabel("角色提示词", self))
         root.addWidget(self.role_edit)
         root.addWidget(QLabel("用户档案", self))
@@ -272,6 +323,21 @@ class SettingsDialog(QDialog):
         btn_row.addWidget(cancel_btn)
         root.addLayout(btn_row)
 
+    def _on_provider_changed(self, index: int) -> None:
+        key = self._provider_keys[index]
+        info = PROVIDERS.get(key)
+        if info and key != "custom":
+            if not self.api_base_url_edit.text() or self.api_base_url_edit.text() in {
+                PROVIDERS[k]["base_url"] for k in self._provider_keys if k != "custom"
+            }:
+                self.api_base_url_edit.setText(info["base_url"])
+            if not self.api_model_edit.text() or self.api_model_edit.text() in {
+                PROVIDERS[k]["default_model"] for k in self._provider_keys if k != "custom"
+            }:
+                self.api_model_edit.setText(info["default_model"])
+        elif key == "custom":
+            pass
+
     def reset_defaults(self) -> None:
         self.role_edit.setPlainText(DEFAULT_ROLE_PROMPT)
         self.user_profile_edit.setPlainText(DEFAULT_USER_PROFILE_PROMPT)
@@ -282,4 +348,7 @@ class SettingsDialog(QDialog):
             role_prompt=self.role_edit.toPlainText().strip() or DEFAULT_ROLE_PROMPT,
             user_profile_prompt=self.user_profile_edit.toPlainText().strip() or DEFAULT_USER_PROFILE_PROMPT,
             api_key=self.api_key_edit.text().strip(),
+            provider=self._provider_keys[self.provider_combo.currentIndex()],
+            api_base_url=self.api_base_url_edit.text().strip(),
+            api_model=self.api_model_edit.text().strip(),
         )

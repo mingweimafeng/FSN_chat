@@ -86,15 +86,69 @@ PAGE_TURN_FADE_IN_DURATION_MS = 180
 # 大模型最小回复字数保护。
 MIN_REPLY_CHARS = 30
 
-# DeepSeek 接口配置。
-DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions"
-DEEPSEEK_MODEL = "deepseek-chat"
-DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
+# OpenAI 兼容接口配置（默认使用 DeepSeek）。
+API_BASE_URL = os.getenv("API_BASE_URL", "https://api.deepseek.com")
+API_MODEL = os.getenv("API_MODEL", "deepseek-chat")
+API_KEY_ENV_VAR = "API_KEY"
+
+PROVIDERS = {
+    "deepseek": {
+        "name": "DeepSeek",
+        "base_url": "https://api.deepseek.com",
+        "default_model": "deepseek-chat",
+    },
+    "openai": {
+        "name": "OpenAI",
+        "base_url": "https://api.openai.com",
+        "default_model": "gpt-4o",
+    },
+    "dashscope": {
+        "name": "阿里通义千问 (DashScope)",
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode",
+        "default_model": "qwen-plus",
+    },
+    "zhipu": {
+        "name": "智谱 GLM",
+        "base_url": "https://open.bigmodel.cn/api/paas/v4",
+        "default_model": "glm-4-plus",
+    },
+    "moonshot": {
+        "name": "月之暗面 Moonshot",
+        "base_url": "https://api.moonshot.cn",
+        "default_model": "moonshot-v1-8k",
+    },
+    "siliconflow": {
+        "name": "硅基流动 SiliconFlow",
+        "base_url": "https://api.siliconflow.cn",
+        "default_model": "deepseek-ai/DeepSeek-V3",
+    },
+    "custom": {
+        "name": "自定义",
+        "base_url": "",
+        "default_model": "",
+    },
+}
+
+
+def resolve_api_config(provider: str = "", api_base_url: str = "", api_model: str = "") -> tuple[str, str]:
+    """根据 provider + 可选覆盖，解析最终的 API Base URL 和 Model 名称。
+    
+    优先级：显式传入的 api_base_url/api_model > PROVIDERS[provider] > 环境变量默认值。
+    """
+    if api_base_url and api_model:
+        return api_base_url, api_model
+    if provider and provider in PROVIDERS:
+        p = PROVIDERS[provider]
+        resolved_url = api_base_url or p["base_url"] or API_BASE_URL
+        resolved_model = api_model or p["default_model"] or API_MODEL
+        return resolved_url, resolved_model
+    return api_base_url or API_BASE_URL, api_model or API_MODEL
+
 
 # 角色资源目录与支持情绪/状态。
-CHARACTER_DIR = _BASE / "characters" / "Saber" / "Casual"
-CHARACTER_EMOTIONS = ("normal", "happy", "angry", "shy","flustered","embarrassed","speechless","serious")
-STATE_TO_ASSET = {"idle": "idle", "thinking": "listen", "speaking": "talk"}
+CHARACTER_DIR = _BASE / "characters" / "Saber" / "dress" / "casual"
+CHARACTER_EMOTIONS = ("normal", "happy", "angry", "shy", "flustered", "embarrassed", "speechless", "serious", "shocked", "worried", "disguested")
+STATE_TO_ASSET = {"idle": "idle", "listen": "listen", "speaking": "talk", "react": "react"}
 
 # 角色绘制位置与尺寸比例。
 CHARACTER_CENTER_X_RATIO = 0.45
@@ -127,7 +181,7 @@ MEMORY_STATE_FILE_PATH = _USER_DATA / "memory_state.json"
 # 固定要求（协议、格式、字数等）。
 DEFAULT_FIXED_REQUIREMENTS_PROMPT = (
     "你必须严格只输出一个 JSON 对象，不允许输出额外文字、代码块标记或解释。"
-    "JSON 格式固定为 {\"narration\": \"第三人称动作或旁白,不允许重复样式表达,不允许使用副词，10到40字，非明显情绪时旁白强制为空\", \"emotion\": \"normal|happy|angry|shy|flustered|embarrassed|speechless|serious\", \"reply\": \"给用户看的中文台词\", \"jp_translation\": \"reply 对应的自然日文翻译,去除特殊符号\", \"segments\": [{\"emotion\": \"normal|happy|angry|shy|flustered|embarrassed|speechless|serious\", \"reply\": \"切片中文\", \"jp_translation\": \"切片对应日文,去除特殊符号\"}]}。"
+    "JSON 格式固定为 {\"narration\": \"第三人称动作或旁白,不允许重复样式表达,不允许使用副词，10到40字，非明显情绪时旁白强制为空\", \"emotion\": \"normal|happy|angry|shy|flustered|embarrassed|speechless|serious|shocked|worried|disguested\", \"reply\": \"给用户看的中文台词\", \"jp_translation\": \"reply 对应的自然日文翻译,去除特殊符号\", \"segments\": [{\"emotion\": \"normal|happy|angry|shy|flustered|embarrassed|speechless|serious|shocked|worried|disguested\", \"reply\": \"切片中文\", \"jp_translation\": \"切片对应日文,去除特殊符号\"}]}。"
     "segments 必须按句号问号感叹号切分，拼接后等于完整 reply，只在语义情绪明显强调时改变情绪,且最多两次情绪变化。"
     "人物完整对话不得少于30字。当明确要讲某个故事或者具体事件等长内容时不得少于100字。"
     "你的精准记忆是最近4次对话,超出的部分你只有大概的记忆."
@@ -175,7 +229,8 @@ ARCUEID_SYSTEM_PROMPT = (
 MEMORY_L1_TURNS = 4
 MEMORY_L2_TRIGGER_EVERY = 4
 MEMORY_L2_RECENT_TURNS = 10
-MEMORY_L2_MAX_SUMMARY_CHARS = 120
+MEMORY_L2_MAX_SUMMARY_CHARS = 200
+MEMORY_L2_MIN_SUMMARY_CHARS = 20
 
 # 优化后的 JSON 格式强约束提示词
 MEMORY_STRICT_JSON_GUARD_PROMPT = (
@@ -183,7 +238,7 @@ MEMORY_STRICT_JSON_GUARD_PROMPT = (
     "务必严格参考以下格式样例，不要输出任何额外的解释或 Markdown 代码块标记：\n"
     "{\n"
     '  "narration": "动作或旁白，10到40字，以句号结尾，非明显情绪时强制为空。",\n'
-    '  "emotion": "normal|happy|angry|shy|flustered|embarrassed|speechless|serious",\n'
+    '  "emotion": "normal|happy|angry|shy|flustered|embarrassed|speechless|serious|shocked|worried|disguested",\n'
     '  "reply": "给用户看的中文台词",\n'
     '  "jp_translation": "reply 对应的自然日文翻译",\n'
     '  "segments": [\n'
@@ -197,7 +252,12 @@ MEMORY_STRICT_JSON_GUARD_PROMPT = (
 )
 
 MEMORY_SUMMARY_PROMPT = (
-    "你是对话记忆压缩器。请基于‘历史对话’与‘上次总结’输出一段不超过 120 字的中文摘要，"
-    "只保留对后续角色陪伴有用的长期信息：用户偏好、近期事件、持续情绪趋势、关键约定。"
+    "你是对话记忆压缩器。请基于'历史对话'与'上次总结'输出一段 20～200 字的中文摘要，"
+    "必须明确记住以下关键信息：\n"
+    "1. 用户（御主士郎）当前关注的事情、需求或困扰\n"
+    "2. 角色（Saber）对重要话题的态度、承诺或情绪变化\n"
+    "3. 双方关系进展（信任度、亲密度的变化）\n"
+    "4. 未完成的约定或计划\n"
+    "5. 已排除或不再重要的旧信息\n"
     "不要输出 JSON，不要解释过程，只输出摘要正文。"
 )

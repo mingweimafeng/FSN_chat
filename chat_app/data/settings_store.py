@@ -20,18 +20,19 @@ class AppSettings:
     role_prompt: str = DEFAULT_ROLE_PROMPT
     user_profile_prompt: str = DEFAULT_USER_PROFILE_PROMPT
     api_key: str = ""
+    provider: str = "deepseek"
+    api_base_url: str = ""
+    api_model: str = ""
     current_background: str = ""
 
-    def compose_system_prompt(self, background_name: str = "") -> str:
-        parts = [
-            self.role_prompt.strip(),
-            self.user_profile_prompt.strip(),
-        ]
-        scene = (background_name or "").strip()
-        if scene:
-            parts.append(f"当前场景：{scene}")
-        parts.append(self.fixed_requirements_prompt.strip())
-        return "\n".join(part for part in parts if part).strip()
+    def compose_system_prompt(self) -> str:
+        return "\n".join(
+            [
+                self.role_prompt.strip(),
+                self.user_profile_prompt.strip(),
+                self.fixed_requirements_prompt.strip(),
+            ]
+        ).strip()
 
 
 @dataclass
@@ -86,6 +87,9 @@ class AppSettingsStore(_BaseStore):
         settings.role_prompt = str(payload.get("role_prompt", settings.role_prompt)).strip() or settings.role_prompt
         settings.user_profile_prompt = str(payload.get("user_profile_prompt", settings.user_profile_prompt)).strip() or settings.user_profile_prompt
         settings.api_key = str(payload.get("api_key", "")).strip()
+        settings.provider = str(payload.get("provider", "deepseek")).strip() or "deepseek"
+        settings.api_base_url = str(payload.get("api_base_url", "")).strip()
+        settings.api_model = str(payload.get("api_model", "")).strip()
         settings.current_background = str(payload.get("current_background", "")).strip()
         return settings
 
@@ -95,6 +99,9 @@ class AppSettingsStore(_BaseStore):
             "role_prompt": settings.role_prompt,
             "user_profile_prompt": settings.user_profile_prompt,
             "api_key": settings.api_key,
+            "provider": settings.provider,
+            "api_base_url": settings.api_base_url,
+            "api_model": settings.api_model,
             "current_background": settings.current_background,
         }
         self._atomic_write(self.file_path, payload)
@@ -107,13 +114,9 @@ class MemoryStateStore(_BaseStore):
 
     def load(self) -> MemoryState:
         payload = self._read_payload(self.file_path)
-        try:
-            turns_since_summary = max(0, int(payload.get("memory_turns_since_summary", 0) or 0))
-        except (TypeError, ValueError):
-            turns_since_summary = 0
         return MemoryState(
             last_summary=str(payload.get("memory_last_summary", "")).strip(),
-            turns_since_summary=turns_since_summary,
+            turns_since_summary=max(0, int(payload.get("memory_turns_since_summary", 0) or 0)),
         )
 
     def save(self, state: MemoryState) -> None:

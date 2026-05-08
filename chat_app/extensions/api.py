@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import TYPE_CHECKING, Callable, Optional
 
 if TYPE_CHECKING:
     from PySide6.QtWidgets import QWidget
 
     from chat_app.audio.audio_manager import AudioManager
+    from chat_app.audio.tts_client import GenieTTSClient
     from chat_app.audio.tts_pipeline import TtsPipelineManager
     from chat_app.core.state_machine import ChatStateMachine
 
@@ -25,12 +27,14 @@ class ExtensionContext:
         chat_state: ChatStateMachine | None = None,
         main_widget: QWidget | None = None,
         emotion_changer: Optional[Callable[[str], None]] = None,
+        tts_client: GenieTTSClient | None = None,
     ) -> None:
         self._tts_pipeline = tts_pipeline
         self._audio_manager = audio_manager
         self._chat_state = chat_state
         self._main_widget = main_widget
         self._emotion_changer = emotion_changer
+        self._tts_client = tts_client
 
     def get_main_widget(self) -> QWidget | None:
         """返回主窗口实例，供需要挂载 UI 控件的插件作为父控件。

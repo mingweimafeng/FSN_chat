@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from chat_app.config import MEMORY_L1_TURNS, MEMORY_L2_MAX_SUMMARY_CHARS, MEMORY_L2_RECENT_TURNS, MEMORY_L2_TRIGGER_EVERY
+from chat_app.config import MEMORY_L1_TURNS, MEMORY_L2_MAX_SUMMARY_CHARS, MEMORY_L2_MIN_SUMMARY_CHARS, MEMORY_L2_RECENT_TURNS, MEMORY_L2_TRIGGER_EVERY
 from chat_app.services.api_client import MemorySummaryThread
 
 
@@ -59,6 +59,9 @@ class MemoryMixin:
             recent_turns=recent_turns,
             last_summary=self.memory_state.last_summary,
             api_key=self.settings.api_key,
+            provider=self.settings.provider,
+            api_base_url=self.settings.api_base_url,
+            api_model=self.settings.api_model,
         )
         self.memory_summary_thread.finished_summary.connect(
             self._on_memory_summary_ready
@@ -75,6 +78,8 @@ class MemoryMixin:
     def _on_memory_summary_ready(self, summary_text: str) -> None:
         summary = (summary_text or "").strip()
         if not summary:
+            return
+        if len(summary) < MEMORY_L2_MIN_SUMMARY_CHARS:
             return
         if len(summary) > MEMORY_L2_MAX_SUMMARY_CHARS:
             summary = summary[:MEMORY_L2_MAX_SUMMARY_CHARS]

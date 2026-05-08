@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QAction, QGuiApplication, QInputMethodEvent, QKeyEvent
 from PySide6.QtWidgets import QDialog, QMenu
 
 from chat_app.config import (
+    API_KEY_ENV_VAR,
+    CHARACTER_DIR,
     CHARACTER_EMOTIONS,
     IDLE_RETURN_DELAY_MS,
     SEGMENT_GAP_INTERVAL_MS,
     ANIMATION_TICK_MS,
 )
+from chat_app.extensions.plugins.favorites import FavoritesExtension
 from chat_app.services.api_client import ChatRequestThread
 from chat_app.ui.dialogs import HistoryDialog, SettingsDialog
 
@@ -171,12 +175,14 @@ class DialogueMixin:
             self.on_request_finished()
             return
 
-        background_name = self.current_background_name() if hasattr(self, "current_background_name") else ""
-        system_prompt = self.settings.compose_system_prompt(background_name)
+        system_prompt = self.settings.compose_system_prompt()
         self.request_thread = ChatRequestThread(
             user_text,
             system_prompt=system_prompt,
             api_key=self.settings.api_key,
+            provider=self.settings.provider,
+            api_base_url=self.settings.api_base_url,
+            api_model=self.settings.api_model,
             memory_messages=self._build_l1_memory_messages(),
         )
         self.request_thread.finished_payload.connect(self.on_reply_ready)
@@ -184,7 +190,7 @@ class DialogueMixin:
         self.request_thread.finished.connect(self.on_request_finished)
         self.request_thread.start()
 
-        self.set_character_state("thinking")
+        self.set_character_state("listen")
         self.update()
 
     def on_reply_ready(self, payload: dict) -> None:
@@ -213,28 +219,23 @@ class DialogueMixin:
             self.history_records = self.history_store.load_records()
             self._maybe_trigger_memory_summary()
 
-        if self.current_narration:
-            self.start_narration_output()
-        else:
-            self.start_next_reply_segment()
-            for _seg in self.pending_reply_segments:
-                self.begin_tts_for_reply(_seg, start_when_ready=False)
-
-    def start_narration_output(self) -> None:
-        self.chat_state.begin_narration_output()
-        self._apply_state_flags()
         self.set_character_emotion(self.top_level_emotion)
-        self.set_character_state("idle", self._do_start_narration)
         for _seg in self.pending_reply_segments:
             self.begin_tts_for_reply(_seg, start_when_ready=False)
+        self.set_character_state("react", self._after_react)
 
-    def _do_start_narration(self) -> None:
-        self.current_reply_full = self.current_narration
-        self.current_reply_visible = ""
-        self.start_text_demote_transition()
-        self.typewriter_timer.start()
-        self._refresh_render_timer_running()
-        self.update()
+    def _after_react(self) -> None:
+        if self.current_narration:
+            self.chat_state.begin_narration_output()
+            self._apply_state_flags()
+            self.current_reply_full = self.current_narration
+            self.current_reply_visible = ""
+            self.start_text_demote_transition()
+            self.typewriter_timer.start()
+            self._refresh_render_timer_running()
+            self.update()
+        else:
+            self.start_next_reply_segment()
 
     def on_narration_wait_elapsed(self) -> None:
         self.current_dialogue_page_text = ""
@@ -582,6 +583,34 @@ class DialogueMixin:
         clear_screen_action.triggered.connect(self.clear_screen_text)
         menu.addAction(clear_screen_action)
 
+        refresh_action = QAction("刷新", self)
+        refresh_action.triggered.connect(lambda: self.set_character_state(self.character_state))
+        menu.addAction(refresh_action)
+
+        menu.addSeparator()
+
+        dress_root = CHARACTER_DIR.parent
+        if dress_root.exists() and dress_root.is_dir():
+            dress_menu = menu.addMenu("服装")
+            available = sorted([d.name for d in dress_root.iterdir() if d.is_dir()])
+            current = getattr(self, "current_dress", "")
+            for name in available:
+                action = QAction(name, self)
+                action.setCheckable(True)
+                action.setChecked(name == current)
+                action.triggered.connect(lambda checked, n=name: self.switch_dress(n))
+                dress_menu.addAction(action)
+
+        favorites_ext = None
+        for ext in self.extension_manager.active_extensions:
+            if isinstance(ext, FavoritesExtension):
+                favorites_ext = ext
+                break
+        if favorites_ext is not None:
+            fav_action = QAction("收藏夹", self)
+            fav_action.triggered.connect(favorites_ext.show_favorites)
+            menu.addAction(fav_action)
+
         menu.exec(event.globalPos())
 
     def open_history_dialog(self) -> None:
@@ -602,9 +631,17 @@ class DialogueMixin:
         self.settings = updated
         self.settings_store.save(self.settings)
         if self.settings.api_key:
-            os.environ["DEEPSEEK_API_KEY"] = self.settings.api_key
+            os.environ[API_KEY_ENV_VAR] = self.settings.api_key
         else:
-            os.environ.pop("DEEPSEEK_API_KEY", None)
+            os.environ.pop(API_KEY_ENV_VAR, None)
+        if self.settings.api_base_url:
+            os.environ["API_BASE_URL"] = self.settings.api_base_url
+        else:
+            os.environ.pop("API_BASE_URL", None)
+        if self.settings.api_model:
+            os.environ["API_MODEL"] = self.settings.api_model
+        else:
+            os.environ.pop("API_MODEL", None)
 
     def restore_input_context(self) -> None:
         QTimer.singleShot(0, self._restore_input_context_impl)

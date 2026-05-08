@@ -8,10 +8,11 @@ from PySide6.QtGui import QFont, QPixmap
 from PySide6.QtWidgets import QApplication, QWidget
 
 from chat_app.audio.audio_manager import AudioManager
-from chat_app.audio.tts_client import GenieTTSClient, TtsWarmupThread
+from chat_app.audio.tts_client import GenieTTSClient, TtsSynthesisThread, TtsWarmupThread
 from chat_app.audio.tts_pipeline import TtsPipelineManager
 from chat_app.config import (
     ANIMATION_TICK_MS,
+    API_KEY_ENV_VAR,
     CHARACTER_DIR,
     CHARACTER_EMOTIONS,
     CURSOR_BLINK_INTERVAL_MS,
@@ -134,15 +135,28 @@ class BackgroundWindow(
         self.pending_resume_action = None
 
     def _init_character_state(self) -> None:
+        self.current_dress = CHARACTER_DIR.name
         self.character_images = load_character_images(CHARACTER_DIR)
         self.character_indices = {
-            emotion: {state: -1 for state in STATE_TO_ASSET.values()}
+            emotion: {state: 0 for state in STATE_TO_ASSET.values()}
             for emotion in CHARACTER_EMOTIONS
         }
         self.character_emotion = "normal"
         self.character_state = "idle"
         self.character_pixmap = QPixmap()
         self.character_draw_cache: dict[int, QRectF] = {}
+
+    def switch_dress(self, dress_name: str) -> None:
+        new_dir = CHARACTER_DIR.parent / dress_name
+        if not new_dir.exists() or not new_dir.is_dir():
+            return
+        self.character_images = load_character_images(new_dir)
+        self.character_indices = {
+            emotion: {state: 0 for state in STATE_TO_ASSET.values()}
+            for emotion in CHARACTER_EMOTIONS
+        }
+        self.current_dress = dress_name
+        self.refresh_character_portrait()
 
     def _build_context(self) -> AppContext:
         self.chat_state = ChatStateMachine(self)
@@ -168,6 +182,7 @@ class BackgroundWindow(
             chat_state=self.chat_state,
             main_widget=self,
             emotion_changer=self.set_character_emotion,
+            tts_client=self.tts_client,
         )
         self.extension_manager = ExtensionManager(ext_context, "chat_app.extensions.plugins")
         ext_result = self.extension_manager.load_all_extensions()
@@ -177,7 +192,11 @@ class BackgroundWindow(
                 flush=True,
             )
         if self.settings.api_key:
-            os.environ["DEEPSEEK_API_KEY"] = self.settings.api_key
+            os.environ[API_KEY_ENV_VAR] = self.settings.api_key
+        if self.settings.api_base_url:
+            os.environ["API_BASE_URL"] = self.settings.api_base_url
+        if self.settings.api_model:
+            os.environ["API_MODEL"] = self.settings.api_model
 
         return AppContext(
             chat_state=self.chat_state,
@@ -224,7 +243,7 @@ class BackgroundWindow(
         pass
 
     def _setup_window(self) -> None:
-        self.setWindowTitle("chat with Saber")
+        self.setWindowTitle("chat with くおんじ ありす")
         self.setFixedSize(WINDOW_WIDTH, WINDOW_HEIGHT)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setMouseTracking(True)
@@ -244,11 +263,7 @@ class BackgroundWindow(
         self.background_drawer.move(self.width(), 0)
         if self.backgrounds:
             saved = self.resolve_saved_background(self.settings.current_background)
-            if saved is None:
-                saved = self.backgrounds[0]
-                self.set_background(saved, persist=True)
-            else:
-                self.set_background(saved, persist=False)
+            self.set_background(saved or self.backgrounds[0], persist=False)
         self.background_drawer.set_current_background(self.current_background)
 
         self.refresh_character_portrait()

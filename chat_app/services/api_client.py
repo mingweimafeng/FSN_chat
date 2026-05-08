@@ -12,20 +12,22 @@ from PySide6.QtCore import QThread, Signal
 logger = logging.getLogger(__name__)
 
 from chat_app.config import (
+    API_BASE_URL,
+    API_KEY_ENV_VAR,
+    API_MODEL,
     ARCUEID_SYSTEM_PROMPT,
     CHARACTER_EMOTIONS,
-    DEEPSEEK_API_URL,
-    DEEPSEEK_MODEL,
     MEMORY_STRICT_JSON_GUARD_PROMPT,
     MEMORY_SUMMARY_PROMPT,
     MIN_REPLY_CHARS,
+    resolve_api_config,
 )
 from chat_app.services.response_parser import ChatResponseParser
 
 
-def _resolve_api_key(api_key: str) -> str:
+def _resolve_api_key(api_key: str, env_var_name: str = API_KEY_ENV_VAR) -> str:
     """解析 API 密钥：优先使用传入值，否则从环境变量读取"""
-    return (api_key or os.getenv("DEEPSEEK_API_KEY", "")).strip()
+    return (api_key or os.getenv(env_var_name, "")).strip()
 
 
 def _post_chat_completion(
@@ -33,24 +35,27 @@ def _post_chat_completion(
         messages: list[dict[str, str]],
         timeout_seconds: int = 60,
         json_mode: bool = False,
+        api_base_url: str = API_BASE_URL,
+        model: str = API_MODEL,
 ) -> str:
     """
-    调用 DeepSeek Chat Completion，返回清洗后的 content。
+    调用 OpenAI 兼容 Chat Completion API，返回清洗后的 content。
     若 json_mode=True 则启用 JSON Output 并设置 max_tokens 防止截断。
     """
+    chat_completions_url = f"{api_base_url.rstrip('/')}/chat/completions"
     payload = {
-        "model": DEEPSEEK_MODEL,
+        "model": model,
         "messages": messages,
         "stream": False,
     }
     if json_mode:
         payload["response_format"] = {"type": "json_object"}
-        payload["max_tokens"] = 8192  # 大输出空间，避免 JSON 截断
+        payload["max_tokens"] = 8192
     else:
-        payload["max_tokens"] = 8192  # 普通模式也设上限，防止无限输出
+        payload["max_tokens"] = 8192
 
     request = urllib.request.Request(
-        DEEPSEEK_API_URL,
+        chat_completions_url,
         data=json.dumps(payload).encode("utf-8"),
         headers={
             "Authorization": f"Bearer {api_key}",
@@ -96,11 +101,17 @@ class ChatRequestThread(QThread):
             system_prompt: str = ARCUEID_SYSTEM_PROMPT,
             api_key: str = "",
             memory_messages: list[dict[str, str]] | None = None,
+            provider: str = "",
+            api_base_url: str = "",
+            api_model: str = "",
     ) -> None:
         super().__init__()
         self.user_text = user_text
         self.system_prompt = system_prompt.strip() or ARCUEID_SYSTEM_PROMPT
         self.api_key = api_key.strip()
+        self.provider = provider.strip()
+        self.api_base_url = api_base_url.strip()
+        self.api_model = api_model.strip()
         self.memory_messages = memory_messages or []
         self.response_parser = ChatResponseParser()
         self._interrupted = False
@@ -113,8 +124,12 @@ class ChatRequestThread(QThread):
         resolved_api_key = _resolve_api_key(self.api_key)
         if not resolved_api_key:
             if not self._interrupted:
-                self.failed.emit("请先在设置中填写 DeepSeek API 密钥。")
+                self.failed.emit("请先在设置中填写 API 密钥。")
             return
+
+        resolved_base_url, resolved_model = resolve_api_config(
+            self.provider, self.api_base_url, self.api_model
+        )
 
         messages = [{"role": "system", "content": self.system_prompt}]
         messages.extend(self.memory_messages)
@@ -130,7 +145,8 @@ class ChatRequestThread(QThread):
                 return
             try:
                 raw_content = _post_chat_completion(
-                    resolved_api_key, messages, timeout_seconds=60, json_mode=True
+                    resolved_api_key, messages, timeout_seconds=60, json_mode=True,
+                    api_base_url=resolved_base_url, model=resolved_model,
                 )
                 break  # 成功获取到非空内容，跳出重试
             except Exception as e:
@@ -147,7 +163,8 @@ class ChatRequestThread(QThread):
                     return
                 try:
                     raw_content = _post_chat_completion(
-                        resolved_api_key, messages, timeout_seconds=60, json_mode=False
+                        resolved_api_key, messages, timeout_seconds=60, json_mode=False,
+                        api_base_url=resolved_base_url, model=resolved_model,
                     )
                     break
                 except Exception as e:
@@ -196,12 +213,16 @@ class MemorySummaryThread(QThread):
     failed = Signal(str)
 
     def __init__(
-            self, recent_turns: list[dict[str, str]], last_summary: str, api_key: str = ""
+            self, recent_turns: list[dict[str, str]], last_summary: str, api_key: str = "",
+            provider: str = "", api_base_url: str = "", api_model: str = "",
     ) -> None:
         super().__init__()
         self.recent_turns = recent_turns
         self.last_summary = last_summary.strip()
         self.api_key = api_key.strip()
+        self.provider = provider.strip()
+        self.api_base_url = api_base_url.strip()
+        self.api_model = api_model.strip()
         self._interrupted = False
 
     def stop(self) -> None:
@@ -214,6 +235,10 @@ class MemorySummaryThread(QThread):
             if not self._interrupted:
                 self.failed.emit("记忆总结失败：未配置 API 密钥。")
             return
+
+        resolved_base_url, resolved_model = resolve_api_config(
+            self.provider, self.api_base_url, self.api_model
+        )
 
         turns_text = "\n".join(
             [
@@ -235,7 +260,8 @@ class MemorySummaryThread(QThread):
         try:
             # 记忆总结不启用 JSON 模式，也不需要重试复杂逻辑，简单抛出异常即可
             summary = _post_chat_completion(
-                resolved_api_key, messages, timeout_seconds=60
+                resolved_api_key, messages, timeout_seconds=60,
+                api_base_url=resolved_base_url, model=resolved_model,
             )
             if not self._interrupted:
                 self.finished_summary.emit(summary.strip())
