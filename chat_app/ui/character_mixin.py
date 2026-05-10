@@ -2,23 +2,24 @@ from __future__ import annotations
 
 import random
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QPixmap
 
 from chat_app.config import (
-    CHARACTER_BASELINE_Y_RATIO,
-    CHARACTER_CENTER_X_RATIO,
     CHARACTER_EMOTIONS,
-    CHARACTER_MAX_HEIGHT_RATIO,
-    CHARACTER_MAX_WIDTH_RATIO,
     EMOTION_RESET_INTERVAL_MS,
     STATE_TO_ASSET,
+    _default_dress_config,
 )
+
+if TYPE_CHECKING:
+    from chat_app.core.window_protocol import WindowProtocol
 
 
 class CharacterMixin:
-    def character_asset_state(self) -> str:
+    def character_asset_state(self: "WindowProtocol") -> str:
         return STATE_TO_ASSET[self.character_state]
 
     def character_candidates(self, emotion: str, asset_state: str) -> list[Path]:
@@ -82,10 +83,12 @@ class CharacterMixin:
         if cached_rect is not None:
             return cached_rect
 
-        max_width = self.width() * CHARACTER_MAX_WIDTH_RATIO
-        max_height = self.height() * CHARACTER_MAX_HEIGHT_RATIO
-        center_x = self.width() * CHARACTER_CENTER_X_RATIO
-        baseline_y = self.height() * CHARACTER_BASELINE_Y_RATIO
+        cfg = getattr(self, "_dress_config", None) or _default_dress_config()
+
+        max_width = self.width() * cfg["max_width_ratio"]
+        max_height = self.height() * cfg["max_height_ratio"]
+        center_x = self.width() * cfg["center_x_ratio"]
+        baseline_y = self.height() * cfg["baseline_y_ratio"]
 
         scaled = pixmap.scaled(
             int(max_width), int(max_height), Qt.KeepAspectRatio, Qt.SmoothTransformation

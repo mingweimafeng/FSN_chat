@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from PySide6.QtCore import QPointF, QRect, QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QFontMetricsF, QPainter, QPixmap
 
@@ -17,6 +19,9 @@ from chat_app.config import (
     TEXT_OUTLINE_WIDTH,
     TEXT_PADDING,
 )
+
+if TYPE_CHECKING:
+    from chat_app.core.window_protocol import WindowProtocol
 
 
 class TextRenderMixin:

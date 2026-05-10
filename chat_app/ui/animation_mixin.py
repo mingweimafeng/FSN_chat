@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from PySide6.QtGui import QPixmap
 
 from chat_app.config import (
@@ -16,9 +18,12 @@ from chat_app.config import (
 )
 from chat_app.core.window_runtime import VirtualTimer
 
+if TYPE_CHECKING:
+    from chat_app.core.window_protocol import WindowProtocol
+
 
 class AnimationMixin:
-    def _refresh_render_timer_running(self) -> None:
+    def _refresh_render_timer_running(self: "WindowProtocol") -> None:
         active = (
             self.cursor_timer.isActive()
             or self.typewriter_timer.isActive()
@@ -30,7 +35,7 @@ class AnimationMixin:
         elif not active and self.render_timer.isActive():
             self.render_timer.stop()
 
-    def _on_render_tick(self) -> None:
+    def _on_render_tick(self: "WindowProtocol") -> None:
         if self.cursor_timer.tick(ANIMATION_TICK_MS):
             self.toggle_cursor()
         if self.typewriter_timer.tick(ANIMATION_TICK_MS):

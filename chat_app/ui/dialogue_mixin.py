@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QAction, QGuiApplication, QInputMethodEvent, QKeyEvent
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QDialog, QMenu
 
 from chat_app.config import (
@@ -15,13 +15,15 @@ from chat_app.config import (
     SEGMENT_GAP_INTERVAL_MS,
     ANIMATION_TICK_MS,
 )
-from chat_app.extensions.plugins.favorites import FavoritesExtension
 from chat_app.services.api_client import ChatRequestThread
 from chat_app.ui.dialogs import HistoryDialog, SettingsDialog
 
+if TYPE_CHECKING:
+    from chat_app.core.window_protocol import WindowProtocol
+
 
 class DialogueMixin:
-    def quote_text(self, text: str) -> str:
+    def quote_text(self: "WindowProtocol", text: str) -> str:
         return f"“{text}”"
 
     def quoted_input(self) -> str:
@@ -432,128 +434,6 @@ class DialogueMixin:
         self._mark_layout_dirty()
         self.update()
 
-    def keyPressEvent(self, event: QKeyEvent) -> None:
-        if self._is_ui_input_locked():
-            event.ignore()
-            return
-        if (
-            self.waiting_for_reply
-            or self.typewriter_timer.isActive()
-            or self.page_turn_timer.isActive()
-            or self.animation_timer.isActive()
-        ):
-            event.ignore()
-            return
-        if event.key() in (Qt.Key_Return, Qt.Key_Enter):
-            if self.preedit_text:
-                super().keyPressEvent(event)
-                return
-            self.submit_input()
-            return
-        if event.key() == Qt.Key_Backspace:
-            if self.preedit_text:
-                super().keyPressEvent(event)
-                return
-            self.current_input = self.current_input[:-1]
-            self._mark_layout_dirty()
-            self.update()
-            return
-
-        if event.key() in (
-            Qt.Key_Left,
-            Qt.Key_Right,
-            Qt.Key_Up,
-            Qt.Key_Down,
-            Qt.Key_Home,
-            Qt.Key_End,
-            Qt.Key_PageUp,
-            Qt.Key_PageDown,
-        ):
-            super().keyPressEvent(event)
-            return
-        if event.key() in (
-            Qt.Key_Shift,
-            Qt.Key_Control,
-            Qt.Key_Alt,
-            Qt.Key_Meta,
-            Qt.Key_CapsLock,
-        ):
-            super().keyPressEvent(event)
-            return
-
-        text = event.text()
-        if not text:
-            super().keyPressEvent(event)
-            return
-        if text == "\r":
-            super().keyPressEvent(event)
-            return
-        if text.isspace() and text != " ":
-            super().keyPressEvent(event)
-            return
-
-        self.current_input += text
-        self._mark_layout_dirty()
-        self.update()
-
-    def inputMethodEvent(self, event: QInputMethodEvent) -> None:
-        if self._is_ui_input_locked():
-            event.ignore()
-            return
-        if (
-            self.waiting_for_reply
-            or self.typewriter_timer.isActive()
-            or self.page_turn_timer.isActive()
-            or self.animation_timer.isActive()
-        ):
-            event.ignore()
-            return
-        commit_text = event.commitString()
-        if commit_text:
-            self.current_input += commit_text
-        self.preedit_text = event.preeditString()
-        self.cursor_visible = True
-        self._mark_layout_dirty()
-        self._mark_cursor_dirty()
-        event.accept()
-        self.update()
-
-    def inputMethodQuery(self, query):
-        if query == Qt.ImEnabled:
-            return True
-        if query == Qt.ImHints:
-            return Qt.ImhNone
-        if query == Qt.ImCursorRectangle:
-            return self.cursor_rect().toRect()
-        if query == Qt.ImSurroundingText:
-            return self.current_input + self.preedit_text
-        if query == Qt.ImCurrentSelection:
-            return ""
-        if query == Qt.ImCursorPosition:
-            return len(self.current_input + self.preedit_text)
-        if query == Qt.ImAnchorPosition:
-            return len(self.current_input + self.preedit_text)
-        return super().inputMethodQuery(query)
-
-    def focusInEvent(self, event) -> None:
-        super().focusInEvent(event)
-        self._refresh_ime()
-
-    def focusOutEvent(self, event) -> None:
-        input_method = QGuiApplication.inputMethod()
-        if input_method is not None:
-            input_method.commit()
-        self.preedit_text = ""
-        super().focusOutEvent(event)
-
-    def mousePressEvent(self, event) -> None:
-        if self._is_ui_input_locked() and not self.background_drawer.geometry().contains(
-            event.pos()
-        ):
-            event.ignore()
-            return
-        super().mousePressEvent(event)
-
     def contextMenuEvent(self, event) -> None:
         menu = QMenu(self)
 
@@ -603,7 +483,7 @@ class DialogueMixin:
 
         favorites_ext = None
         for ext in self.extension_manager.active_extensions:
-            if isinstance(ext, FavoritesExtension):
+            if ext.name == "Favorites":
                 favorites_ext = ext
                 break
         if favorites_ext is not None:
@@ -642,27 +522,3 @@ class DialogueMixin:
             os.environ["API_MODEL"] = self.settings.api_model
         else:
             os.environ.pop("API_MODEL", None)
-
-    def restore_input_context(self) -> None:
-        QTimer.singleShot(0, self._restore_input_context_impl)
-
-    def _refresh_ime(self) -> None:
-        """刷新并激活 IME（输入法）。
-
-        应在获取焦点或对话框关闭后调用，确保输入法保持可用状态。
-        """
-        input_method = QGuiApplication.inputMethod()
-        if input_method is not None:
-            input_method.show()
-            input_method.update(
-                Qt.ImEnabled | Qt.ImCursorRectangle | Qt.ImSurroundingText
-            )
-
-    def _restore_input_context_impl(self) -> None:
-        if not self.isVisible():
-            return
-        self.activateWindow()
-        self.raise_()
-        self.setFocus(Qt.ActiveWindowFocusReason)
-        self._refresh_ime()
-        self.update()

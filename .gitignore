@@ -39,5 +39,10 @@ Thumbs.db
 .DS_Store
 
 # Packaging output
+build_package/
+*.spec
+
+# Local packaging script (not uploaded to GitHub)
+build_exe.py
 PACKAGING_GUIDE.md
 PROJECT_STRUCTURE.md

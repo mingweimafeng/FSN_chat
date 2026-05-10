@@ -15,7 +15,7 @@ from chat_app.config import (
     API_BASE_URL,
     API_KEY_ENV_VAR,
     API_MODEL,
-    ARCUEID_SYSTEM_PROMPT,
+    SYSTEM_PROMPT,
     CHARACTER_EMOTIONS,
     MEMORY_STRICT_JSON_GUARD_PROMPT,
     MEMORY_SUMMARY_PROMPT,
@@ -98,7 +98,7 @@ class ChatRequestThread(QThread):
     def __init__(
             self,
             user_text: str,
-            system_prompt: str = ARCUEID_SYSTEM_PROMPT,
+            system_prompt: str = SYSTEM_PROMPT,
             api_key: str = "",
             memory_messages: list[dict[str, str]] | None = None,
             provider: str = "",
@@ -107,7 +107,7 @@ class ChatRequestThread(QThread):
     ) -> None:
         super().__init__()
         self.user_text = user_text
-        self.system_prompt = system_prompt.strip() or ARCUEID_SYSTEM_PROMPT
+        self.system_prompt = system_prompt.strip() or SYSTEM_PROMPT
         self.api_key = api_key.strip()
         self.provider = provider.strip()
         self.api_base_url = api_base_url.strip()

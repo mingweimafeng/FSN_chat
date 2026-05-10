@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from chat_app.audio.tts_client import TtsWarmupThread
 from chat_app.config import SEGMENT_GAP_INTERVAL_MS, IDLE_RETURN_DELAY_MS, TEMP_AUDIO_DIR
 
+if TYPE_CHECKING:
+    from chat_app.core.window_protocol import WindowProtocol
+
 
 class AudioMixin:
-    def _setup_audio_connections(self) -> None:
+    def _setup_audio_connections(self: "WindowProtocol") -> None:
         self.tts_pipeline.audio_ready.connect(self._on_tts_audio_ready)
         self.tts_pipeline.synthesis_failed.connect(self._on_tts_synthesis_failed)
 
@@ -16,7 +20,8 @@ class AudioMixin:
         self.tts_warmup_thread.failed.connect(self.on_tts_warmup_failed)
 
     def on_tts_warmup_failed(self, error_text: str) -> None:
-        print(f"[TTS warmup failed] {error_text}")
+        if hasattr(self, "show_toast"):
+            self.show_toast(f"语音引擎初始化失败: {error_text}", 8000)
 
     def begin_tts_for_reply(
         self, segment: dict[str, str], start_when_ready: bool
@@ -45,7 +50,8 @@ class AudioMixin:
             self.start_segment_after_audio_ready(segment)
 
     def _on_tts_synthesis_failed(self, segment: dict[str, str], start_when_ready: bool, error_text: str) -> None:
-        print(f"[TTS synth failed] {error_text}")
+        if hasattr(self, "show_toast"):
+            self.show_toast(f"语音合成失败: {error_text}")
         if start_when_ready:
             self.start_segment_after_audio_ready(segment)
 
@@ -64,7 +70,8 @@ class AudioMixin:
             self.idle_timer.start(IDLE_RETURN_DELAY_MS)
 
     def _on_audio_manager_failed(self, error_msg: str) -> None:
-        print(f"[Audio Error] {error_msg}")
+        if hasattr(self, "show_toast"):
+            self.show_toast(f"音频播放失败: {error_msg}")
         self._on_audio_manager_finished()
 
     def cleanup_all_temp_audio(self) -> None:

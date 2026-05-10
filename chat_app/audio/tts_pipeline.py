@@ -21,10 +21,16 @@ class TtsPipelineManager(QObject):
         self._tts_thread: Optional[TtsSynthesisThread] = None
 
     def begin_tts_for_reply(self, segment: dict[str, str], start_when_ready: bool) -> None:
-        if segment.get("audio_path") or segment.get("audio_failed"):
+        if segment.get("audio_path"):
             if start_when_ready:
                 self.audio_ready.emit(segment, True)
             return
+
+        if segment.get("audio_failed"):
+            if start_when_ready:
+                segment.pop("audio_failed", None)
+            else:
+                return
 
         if self._active_synth_segment is segment:
             if start_when_ready and not self._active_synth_start_when_ready:
@@ -77,8 +83,18 @@ class TtsPipelineManager(QObject):
         self.begin_tts_for_reply(next_segment, start_when_ready=False)
 
     def _on_tts_audio_ready(self, audio_path: str) -> None:
+        sender = self.sender()
         segment = self._active_synth_segment
         start_when_ready = self._active_synth_start_when_ready
+        if sender is not None:
+            try:
+                sender.finished_audio.disconnect(self._on_tts_audio_ready)
+            except Exception:
+                pass
+            try:
+                sender.failed.disconnect(self._on_tts_audio_failed)
+            except Exception:
+                pass
         if segment is not None:
             segment["audio_path"] = audio_path
 
@@ -92,6 +108,16 @@ class TtsPipelineManager(QObject):
 
     def _on_tts_audio_failed(self, error_text: str) -> None:
         print(f"[TTS synth failed] {error_text}")
+        sender = self.sender()
+        if sender is not None:
+            try:
+                sender.finished_audio.disconnect(self._on_tts_audio_ready)
+            except Exception:
+                pass
+            try:
+                sender.failed.disconnect(self._on_tts_audio_failed)
+            except Exception:
+                pass
         segment = self._active_synth_segment
         if segment is None:
             self._tts_thread = None
@@ -113,3 +139,4 @@ class TtsPipelineManager(QObject):
         self._active_synth_start_when_ready = False
         if self._tts_thread is not None and self._tts_thread.isRunning():
             self._tts_thread.stop()
+        self._tts_thread = None

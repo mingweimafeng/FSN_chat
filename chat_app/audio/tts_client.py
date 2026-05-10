@@ -3,7 +3,6 @@ from __future__ import annotations
 import io
 import multiprocessing
 import os
-import socket
 import sys
 import time
 import uuid
@@ -35,10 +34,6 @@ def _run_genie_server(host: str, port: int) -> None:
     import sys
 
     os.environ.setdefault("PYTHONIOENCODING", "utf-8")
-
-    if getattr(sys, "frozen", False):
-        genie_data = os.path.join(sys._MEIPASS, "GenieData")
-        os.environ["GENIE_DATA_DIR"] = genie_data
 
     _real_input = builtins.input
 
@@ -75,14 +70,12 @@ class GenieTTSClient:
         self._session = requests.Session()
         TEMP_AUDIO_DIR.mkdir(parents=True, exist_ok=True)
 
-    def ensure_server_running(self, timeout_s: float = 10.0) -> None:
+    def ensure_server_running(self, timeout_s: float = 30.0) -> None:
         if self._is_server_ready():
             return
 
         if self.server_process is None or not self.server_process.is_alive():
             os.environ.setdefault("PYTHONIOENCODING", "utf-8")
-            if getattr(sys, "frozen", False):
-                os.environ["GENIE_DATA_DIR"] = os.path.join(sys._MEIPASS, "GenieData")
             self.server_process = multiprocessing.Process(
                 target=_run_genie_server,
                 args=(GENIE_SERVER_HOST, GENIE_SERVER_PORT),
@@ -94,7 +87,7 @@ class GenieTTSClient:
         while time.time() - start < timeout_s:
             if self._is_server_ready():
                 return
-            time.sleep(0.2)
+            time.sleep(0.3)
         raise RuntimeError("Genie TTS server 启动超时。")
 
     def initialize(self) -> None:
@@ -107,8 +100,17 @@ class GenieTTSClient:
             "onnx_model_dir": str(GENIE_ONNX_MODEL_DIR),
             "language": GENIE_MODEL_LANGUAGE,
         }
-        self._post_json("/load_character", payload)
-        self.character_loaded = True
+        last_error = None
+        for attempt in range(3):
+            try:
+                self._post_json("/load_character", payload, timeout=60)
+                self.character_loaded = True
+                return
+            except Exception as e:
+                last_error = e
+                if attempt < 2:
+                    time.sleep(1.5 * (attempt + 1))
+        raise RuntimeError(f"Genie TTS 角色加载失败(已重试3次): {last_error}")
 
     def synthesize_to_temp_file(self, text: str, emotion: str) -> Path:
         content = text.strip()
@@ -180,9 +182,9 @@ class GenieTTSClient:
 
     def _is_server_ready(self) -> bool:
         try:
-            with socket.create_connection((GENIE_SERVER_HOST, GENIE_SERVER_PORT), timeout=2) as sock:
-                return True
-        except (OSError, socket.error, socket.timeout):
+            resp = self._session.get(f"{self.base_url}/docs", timeout=3)
+            return resp.status_code < 500
+        except Exception:
             return False
 
     def _post_json(self, endpoint: str, payload: Optional[dict], timeout: int = 30) -> dict:
@@ -194,16 +196,24 @@ class GenieTTSClient:
             return {}
 
     def _request_tts_audio_bytes(self, payload: dict) -> bytes:
-        response = self._session.post(f"{self.base_url}/tts", json=payload, timeout=30, stream=True)
-        response.raise_for_status()
+        last_error = None
+        for attempt in range(3):
+            try:
+                response = self._session.post(f"{self.base_url}/tts", json=payload, timeout=30, stream=True)
+                response.raise_for_status()
 
-        audio_bytes = b""
-        for chunk in response.iter_content(chunk_size=8192):
-            audio_bytes += chunk
+                audio_bytes = b""
+                for chunk in response.iter_content(chunk_size=8192):
+                    audio_bytes += chunk
 
-        if not audio_bytes:
-            raise RuntimeError("Genie TTS 返回了空音频。")
-        return audio_bytes
+                if not audio_bytes:
+                    raise RuntimeError("Genie TTS 返回了空音频。")
+                return audio_bytes
+            except Exception as e:
+                last_error = e
+                if attempt < 2:
+                    time.sleep(0.5 * (attempt + 1))
+        raise RuntimeError(f"Genie TTS 合成失败(已重试3次): {last_error}")
 
     def _write_audio_file(self, output_path: Path, audio_bytes: bytes) -> None:
         if audio_bytes[:4] == b"RIFF":

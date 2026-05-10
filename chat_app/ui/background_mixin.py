@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from PySide6.QtCore import Qt, QRect
 from PySide6.QtGui import QColor, QCursor, QLinearGradient, QPainter, QPixmap
@@ -12,9 +13,12 @@ from chat_app.config import (
     MASK_SIDE_FADE_START_RATIO,
 )
 
+if TYPE_CHECKING:
+    from chat_app.core.window_protocol import WindowProtocol
+
 
 class BackgroundMixin:
-    def resolve_saved_background(self, saved_path_text: str) -> Path | None:
+    def resolve_saved_background(self: "WindowProtocol", saved_path_text: str) -> Path | None:
         saved = (saved_path_text or "").strip()
         if not saved:
             return None

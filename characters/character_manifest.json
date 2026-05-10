@@ -1,0 +1,10 @@
+{
+    "default": "Saber",
+    "Saber": {
+        "name": "Saber",
+        "default_dress": "Casual",
+        "tts_character_name": "Saber",
+        "tts_language": "jp",
+        "tts_reference_language": "jp"
+    }
+}

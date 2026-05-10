@@ -21,9 +21,9 @@ from PySide6.QtWidgets import (
 )
 
 from chat_app.config import DEFAULT_ROLE_PROMPT, DEFAULT_USER_PROFILE_PROMPT, PROVIDERS
+from chat_app.data.favorites_store import FavoritesStore
 from chat_app.data.history_store import ChatHistoryStore, HistoryRecord
 from chat_app.data.settings_store import AppSettings, SettingsStore
-from chat_app.extensions.plugins.favorites import FavoritesStore
 
 
 class HistoryDialog(QDialog):

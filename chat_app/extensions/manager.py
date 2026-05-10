@@ -3,7 +3,6 @@ from __future__ import annotations
 import importlib
 import inspect
 import pkgutil
-import sys
 import traceback
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
@@ -89,18 +88,6 @@ class ExtensionManager:
                 names.append(info.name)
         except Exception:
             pass
-
-        if names:
-            return names
-
-        if getattr(sys, "frozen", False):
-            for candidate in ("music_player", "cursor_idle_hider"):
-                full = f"{self._plugin_package}.{candidate}"
-                try:
-                    importlib.import_module(full)
-                    names.append(candidate)
-                except ImportError:
-                    pass
 
         return names
 

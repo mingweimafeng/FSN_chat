@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import QRect, QRectF, Qt, QTimer, Signal
-from PySide6.QtGui import QFont, QPixmap
+from PySide6.QtGui import QColor, QFont, QPainter, QPixmap
 from PySide6.QtWidgets import QApplication, QWidget
 
 from chat_app.audio.audio_manager import AudioManager
@@ -24,6 +24,7 @@ from chat_app.config import (
     TYPEWRITER_INTERVAL_MS,
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
+    load_dress_config,
 )
 from chat_app.core.app_context import AppContext
 from chat_app.core.state_machine import ChatStateMachine
@@ -41,10 +42,12 @@ from chat_app.ui.character_mixin import CharacterMixin
 from chat_app.ui.text_render_mixin import TextRenderMixin
 from chat_app.ui.audio_mixin import AudioMixin
 from chat_app.ui.dialogue_mixin import DialogueMixin
-from chat_app.ui.memory_mixin import MemoryMixin
+from chat_app.ui.input_mixin import InputMixin
+from chat_app.core.memory_mixin import MemoryMixin
 
 
 class BackgroundWindow(
+    InputMixin,
     DialogueMixin,
     BackgroundMixin,
     CharacterMixin,
@@ -68,6 +71,11 @@ class BackgroundWindow(
         self._setup_window()
 
     def _init_basic_state(self) -> None:
+        self._loading = True
+        self._toast_message = ""
+        self._toast_timer = QTimer(self)
+        self._toast_timer.setSingleShot(True)
+        self._toast_timer.timeout.connect(self._clear_toast)
         self.backgrounds = find_backgrounds(self.background_dir)
         self.current_background: Path | None = None
         self.current_pixmap = QPixmap()
@@ -136,6 +144,7 @@ class BackgroundWindow(
 
     def _init_character_state(self) -> None:
         self.current_dress = CHARACTER_DIR.name
+        self._dress_config = load_dress_config(self.current_dress)
         self.character_images = load_character_images(CHARACTER_DIR)
         self.character_indices = {
             emotion: {state: 0 for state in STATE_TO_ASSET.values()}
@@ -156,6 +165,7 @@ class BackgroundWindow(
             for emotion in CHARACTER_EMOTIONS
         }
         self.current_dress = dress_name
+        self._dress_config = load_dress_config(dress_name)
         self.refresh_character_portrait()
 
     def _build_context(self) -> AppContext:
@@ -299,7 +309,49 @@ class BackgroundWindow(
             self.background_drawer.close_drawer()
 
     def _on_warmup_done(self, *args) -> None:
+        self._loading = False
         self.ready.emit()
+        self.update()
+
+    def paintEvent(self, event) -> None:
+        if self._loading:
+            painter = QPainter(self)
+            painter.setRenderHint(QPainter.Antialiasing)
+            painter.setRenderHint(QPainter.TextAntialiasing)
+            painter.fillRect(self.rect(), QColor(12, 12, 16))
+            font = QFont()
+            font.setPointSize(20)
+            painter.setFont(font)
+            painter.setPen(QColor(180, 180, 190))
+            painter.drawText(self.rect(), Qt.AlignCenter, "正在初始化语音引擎...")
+            painter.end()
+            return
+        super().paintEvent(event)
+        if self._toast_message:
+            self._draw_toast()
+
+    def show_toast(self, message: str, duration_ms: int = 5000) -> None:
+        self._toast_message = message
+        self._toast_timer.start(duration_ms)
+        self.update()
+
+    def _clear_toast(self) -> None:
+        self._toast_message = ""
+        self.update()
+
+    def _draw_toast(self) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        r = self.rect()
+        bar_height = 40
+        bar_rect = QRect(0, r.bottom() - bar_height, r.width(), bar_height)
+        painter.fillRect(bar_rect, QColor(0, 0, 0, 180))
+        font = QFont()
+        font.setPointSize(12)
+        painter.setFont(font)
+        painter.setPen(QColor(255, 200, 200))
+        painter.drawText(bar_rect.adjusted(20, 0, -20, 0), Qt.AlignLeft | Qt.AlignVCenter, self._toast_message)
+        painter.end()
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -345,19 +397,24 @@ class BackgroundWindow(
             self.extension_manager.unload_all()
         if self.request_thread is not None and self.request_thread.isRunning():
             self.request_thread.stop()
-            self.request_thread.wait(2000)
-        if hasattr(self, "tts_pipeline") and self.tts_pipeline._tts_thread is not None and self.tts_pipeline._tts_thread.isRunning():
-            self.tts_pipeline._tts_thread.stop()
-            self.tts_pipeline._tts_thread.wait(2000)
+            if not self.request_thread.wait(2000):
+                self.request_thread.terminate()
+                self.request_thread.wait()
+        if hasattr(self, "tts_pipeline"):
+            self.tts_pipeline.reset()
         if self.tts_warmup_thread is not None and self.tts_warmup_thread.isRunning():
             self.tts_warmup_thread.stop()
-            self.tts_warmup_thread.wait(2000)
+            if not self.tts_warmup_thread.wait(2000):
+                self.tts_warmup_thread.terminate()
+                self.tts_warmup_thread.wait()
         if (
             self.memory_summary_thread is not None
             and self.memory_summary_thread.isRunning()
         ):
             self.memory_summary_thread.stop()
-            self.memory_summary_thread.wait(2000)
+            if not self.memory_summary_thread.wait(2000):
+                self.memory_summary_thread.terminate()
+                self.memory_summary_thread.wait()
         self.tts_client.shutdown()
         super().closeEvent(event)
 

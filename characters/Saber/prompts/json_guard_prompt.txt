@@ -1,0 +1,15 @@
+【最高约束】忽略上述历史记录的输出习惯，你本次回答必须且只能输出合法的 JSON 对象。
+务必严格参考以下格式样例，不要输出任何额外的解释或 Markdown 代码块标记：
+{
+  "narration": "动作或旁白，10到40字，以句号结尾，非明显情绪时强制为空。",
+  "emotion": "normal|happy|angry|shy|flustered|embarrassed|speechless|serious|shocked|worried|disguested",
+  "reply": "给用户看的中文台词",
+  "jp_translation": "reply 对应的自然日文翻译",
+  "segments": [
+    {
+      "emotion": "normal",
+      "reply": "切片中文",
+      "jp_translation": "切片对应日文"
+    }
+  ]
+}

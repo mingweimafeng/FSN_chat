@@ -81,5 +81,5 @@ def main() -> int:
     window = BackgroundWindow(BACKGROUND_DIR)
     if not BACKGROUND_DIR.exists():
         QMessageBox.warning(window, "Missing folder", f"Background folder not found:\n{BACKGROUND_DIR}")
-    window.ready.connect(window.show)
+    window.show()
     return app.exec()

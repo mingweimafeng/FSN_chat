@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from chat_app.config import MEMORY_L1_TURNS, MEMORY_L2_MAX_SUMMARY_CHARS, MEMORY_L2_MIN_SUMMARY_CHARS, MEMORY_L2_RECENT_TURNS, MEMORY_L2_TRIGGER_EVERY
 from chat_app.services.api_client import MemorySummaryThread
 
+if TYPE_CHECKING:
+    from chat_app.core.window_protocol import WindowProtocol
+
 
 class MemoryMixin:
-    def _build_l1_memory_messages(self) -> list[dict[str, str]]:
+    def _build_l1_memory_messages(self: "WindowProtocol") -> list[dict[str, str]]:
         messages: list[dict[str, str]] = []
         if self.memory_state.last_summary:
             messages.append(

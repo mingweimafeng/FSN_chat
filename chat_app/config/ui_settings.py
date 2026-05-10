@@ -1,0 +1,50 @@
+from __future__ import annotations
+
+from PySide6.QtGui import QColor
+
+from ._helpers import _BASE
+
+
+# 窗口尺寸（16:9）。
+WINDOW_WIDTH = 1280
+WINDOW_HEIGHT = 720
+
+# 全屏相关常量。
+FULLSCREEN_BASE_WIDTH = 1280
+FULLSCREEN_BASE_HEIGHT = 720
+FULLSCREEN_MIN_FONT_SIZE = 18
+FULLSCREEN_MAX_SCALE = 2.5
+
+# 背景图支持的扩展名。
+SUPPORTED_EXTENSIONS = (".png", ".jpg", ".jpeg", ".webp")
+BACKGROUND_DIR = _BASE / "backgrounds"
+
+# 音乐文件目录。
+MUSIC_DIR = _BASE / "music"
+
+# SVG 蒙版配置。
+MASK_CENTER_OPACITY = 0.6
+MASK_SIDE_FADE_START_RATIO = 0.10
+MASK_SIDE_FADE_END_RATIO = 0.90
+
+# 全局黑色蒙版透明度。
+OVERLAY_OPACITY = 0.3
+
+# 文本显示区域在窗口中的比例。
+DISPLAY_LEFT_RATIO = 1 / 6
+DISPLAY_RIGHT_RATIO = 5 / 6
+DISPLAY_TOP_RATIO = 1 / 8
+DISPLAY_BOTTOM_RATIO = 4 / 5
+
+# 文本渲染参数。
+FONT_SIZE = 23
+LINE_SPACING = 14
+TEXT_PADDING = 10
+TEXT_COLOR = QColor(255, 255, 255)
+TEXT_OUTLINE_COLOR = QColor(0, 0, 0)
+TEXT_OUTLINE_WIDTH = 1.0
+
+# 光标与打字机节奏。
+CURSOR_CHAR = "_"
+CURSOR_BLINK_INTERVAL_MS = 500
+TYPEWRITER_INTERVAL_MS = 35
