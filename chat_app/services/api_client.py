@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import time
 import urllib.error
 import urllib.request
@@ -13,21 +12,18 @@ logger = logging.getLogger(__name__)
 
 from chat_app.config import (
     API_BASE_URL,
-    API_KEY_ENV_VAR,
     API_MODEL,
     SYSTEM_PROMPT,
     CHARACTER_EMOTIONS,
     MEMORY_STRICT_JSON_GUARD_PROMPT,
     MEMORY_SUMMARY_PROMPT,
-    MIN_REPLY_CHARS,
     resolve_api_config,
 )
 from chat_app.services.response_parser import ChatResponseParser
 
 
-def _resolve_api_key(api_key: str, env_var_name: str = API_KEY_ENV_VAR) -> str:
-    """解析 API 密钥：优先使用传入值，否则从环境变量读取"""
-    return (api_key or os.getenv(env_var_name, "")).strip()
+def _resolve_api_key(api_key: str) -> str:
+    return api_key.strip()
 
 
 def _post_chat_completion(
@@ -43,6 +39,9 @@ def _post_chat_completion(
     若 json_mode=True 则启用 JSON Output 并设置 max_tokens 防止截断。
     """
     chat_completions_url = f"{api_base_url.rstrip('/')}/chat/completions"
+    if chat_completions_url.startswith("http://"):
+        logger.warning("API base URL 使用 HTTP 明文协议，API 密钥可能在网络上暴露。建议使用 HTTPS。")
+        raise ValueError("不允许使用 HTTP 协议传输 API 密钥，请使用 HTTPS。")
     payload = {
         "model": model,
         "messages": messages,
@@ -69,20 +68,7 @@ def _post_chat_completion(
 
     # 安全提取 content
     content = data.get("choices", [{}])[0].get("message", {}).get("content")
-    # 如果 content 是 None，转为空字符串
     raw = str(content).strip() if content is not None else ""
-
-    # ======= 新增清洗逻辑：剥离 Markdown 代码块标记 =======
-    if raw.startswith("```json"):
-        raw = raw[7:]
-    elif raw.startswith("```"):
-        raw = raw[3:]
-
-    if raw.endswith("```"):
-        raw = raw[:-3]
-
-    raw = raw.strip()
-    # ======================================================
 
     # 有效性校验：空内容、仅空白或仅 {} / {"} 均视为无效应答
     if not raw or raw == "{}" or raw == '{"}':

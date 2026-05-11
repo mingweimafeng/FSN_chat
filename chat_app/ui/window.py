@@ -12,8 +12,8 @@ from chat_app.audio.tts_client import GenieTTSClient, TtsSynthesisThread, TtsWar
 from chat_app.audio.tts_pipeline import TtsPipelineManager
 from chat_app.config import (
     ANIMATION_TICK_MS,
-    API_KEY_ENV_VAR,
     CHARACTER_DIR,
+    CHARACTER_DRESS_DIR,
     CHARACTER_EMOTIONS,
     CURSOR_BLINK_INTERVAL_MS,
     FONT_SIZE,
@@ -28,6 +28,7 @@ from chat_app.config import (
 )
 from chat_app.core.app_context import AppContext
 from chat_app.core.state_machine import ChatStateMachine
+from chat_app.core.window_protocol import WindowProtocol
 from chat_app.core.window_runtime import VirtualTimer
 from chat_app.data.assets import find_backgrounds, load_character_images
 from chat_app.data.history_store import ChatHistoryStore, HistoryRecord
@@ -92,17 +93,17 @@ class BackgroundWindow(
         self._cursor_rect_cache = QRectF()
         self.current_input = ""
         self.preedit_text = ""
+        self.cursor_caret = 0
         self.current_reply_full = ""
         self.current_reply_visible = ""
+        self.current_narration = ""
+        self.top_level_emotion = "normal"
         self.pending_reply_segments: list[dict[str, str]] = []
         self.current_dialogue_page_text = ""
         self.current_dialogue_base_line_count = 0
-        self.waiting_for_reply = False
         self.cursor_visible = True
-        self.reply_output_active = False
         self.request_thread: ChatRequestThread | None = None
         self.memory_summary_thread: MemorySummaryThread | None = None
-        self.is_outputting_narration = False
         self.tts_client = GenieTTSClient()
         self.tts_warmup_thread: TtsWarmupThread | None = None
         self.current_segment_requires_transition = False
@@ -156,7 +157,7 @@ class BackgroundWindow(
         self.character_draw_cache: dict[int, QRectF] = {}
 
     def switch_dress(self, dress_name: str) -> None:
-        new_dir = CHARACTER_DIR.parent / dress_name
+        new_dir = CHARACTER_DRESS_DIR / dress_name
         if not new_dir.exists() or not new_dir.is_dir():
             return
         self.character_images = load_character_images(new_dir)
@@ -170,7 +171,7 @@ class BackgroundWindow(
 
     def _build_context(self) -> AppContext:
         self.chat_state = ChatStateMachine(self)
-        self.chat_state.flags_changed.connect(self._apply_state_flags)
+        self.chat_state.flags_changed.connect(self._mark_cursor_dirty)
 
         self.history_store = ChatHistoryStore()
         self.history_records: list[HistoryRecord] = self.history_store.load_records()
@@ -201,8 +202,6 @@ class BackgroundWindow(
                 f"[Extension] loaded={ext_result.loaded}, failed={ext_result.failed}",
                 flush=True,
             )
-        if self.settings.api_key:
-            os.environ[API_KEY_ENV_VAR] = self.settings.api_key
         if self.settings.api_base_url:
             os.environ["API_BASE_URL"] = self.settings.api_base_url
         if self.settings.api_model:
@@ -282,11 +281,19 @@ class BackgroundWindow(
             self.tts_warmup_thread.warmed_up.connect(self._on_warmup_done)
             self.tts_warmup_thread.failed.connect(self._on_warmup_done)
             self.tts_warmup_thread.start()
-        self._apply_state_flags()
         self.cursor_timer.start()
         self._refresh_render_timer_running()
         self.cleanup_all_temp_audio()
         self._active_overlay: str | None = None
+        self._verify_protocol_contract()
+
+    def _verify_protocol_contract(self) -> None:
+        missing: list[str] = []
+        for attr_name in WindowProtocol.__annotations__:
+            if not hasattr(self, attr_name):
+                missing.append(attr_name)
+        if missing:
+            print(f"[WindowProtocol] 缺失 {len(missing)} 个属性: {', '.join(missing)}", flush=True)
 
     def _set_active_overlay(self, name: str | None) -> None:
         if name == self._active_overlay:
@@ -298,11 +305,7 @@ class BackgroundWindow(
         self._active_overlay = name
 
     def _close_music_player(self) -> None:
-        if not hasattr(self, "extension_manager"):
-            return
-        for ext in self.extension_manager.active_extensions:
-            if hasattr(ext, "_is_showing") and ext._is_showing:
-                ext._slide_up()
+        self.extension_manager.close_overlay()
 
     def _close_background_drawer(self) -> None:
         if hasattr(self, "background_drawer") and self.background_drawer.is_open:
@@ -355,16 +358,7 @@ class BackgroundWindow(
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
-        QTimer.singleShot(100, self._refresh_ime)
-
-    def _apply_state_flags(self) -> None:
-        self.waiting_for_reply = self.chat_state.waiting_for_reply
-        self.reply_output_active = self.chat_state.reply_output_active
-        self.is_outputting_narration = self.chat_state.is_outputting_narration
-        self.waiting_audio_before_next_segment = (
-            self.chat_state.waiting_audio_before_next_segment
-        )
-        self._mark_layout_dirty()
+        QTimer.singleShot(0, self._restore_input_context_impl)
 
     def resizeEvent(self, event) -> None:
         self.refresh_scaled_background()
@@ -385,7 +379,7 @@ class BackgroundWindow(
 
     def closeEvent(self, event) -> None:
         self.chat_state.begin_closing()
-        self._apply_state_flags()
+        self._mark_layout_dirty()
         self.render_timer.stop()
         self.narration_wait_timer.stop()
         self.drawer_trigger_timer.stop()

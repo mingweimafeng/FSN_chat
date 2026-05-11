@@ -12,6 +12,7 @@ from chat_app.config import (
     MEMORY_STATE_FILE_PATH,
     SETTINGS_FILE_PATH,
 )
+from chat_app.data.credential_store import retrieve_api_key, store_api_key
 
 
 @dataclass
@@ -86,7 +87,7 @@ class AppSettingsStore(_BaseStore):
         settings.fixed_requirements_prompt = fixed_prompt
         settings.role_prompt = str(payload.get("role_prompt", settings.role_prompt)).strip() or settings.role_prompt
         settings.user_profile_prompt = str(payload.get("user_profile_prompt", settings.user_profile_prompt)).strip() or settings.user_profile_prompt
-        settings.api_key = str(payload.get("api_key", "")).strip()
+        settings.api_key = retrieve_api_key() or str(payload.get("api_key", "")).strip()
         settings.provider = str(payload.get("provider", "deepseek")).strip() or "deepseek"
         settings.api_base_url = str(payload.get("api_base_url", "")).strip()
         settings.api_model = str(payload.get("api_model", "")).strip()
@@ -94,6 +95,7 @@ class AppSettingsStore(_BaseStore):
         return settings
 
     def save(self, settings: AppSettings) -> None:
+        store_api_key(settings.api_key)
         payload = {
             "fixed_requirements_prompt": settings.fixed_requirements_prompt,
             "role_prompt": settings.role_prompt,

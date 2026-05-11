@@ -8,8 +8,8 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QDialog, QMenu
 
 from chat_app.config import (
-    API_KEY_ENV_VAR,
     CHARACTER_DIR,
+    CHARACTER_DRESS_DIR,
     CHARACTER_EMOTIONS,
     IDLE_RETURN_DELAY_MS,
     SEGMENT_GAP_INTERVAL_MS,
@@ -29,6 +29,12 @@ class DialogueMixin:
     def quoted_input(self) -> str:
         text = self.current_input + self.preedit_text
         return self.quote_text(text) if text else ""
+
+    def _strip_existing_quotes(self, text: str) -> str:
+        text = text.strip()
+        if text.startswith(("「", "『", '"', "'", "“")) and text.endswith(("」", "』", '"', "'", "”")):
+            text = text[1:-1].strip()
+        return text
 
     def normalize_reply_segments(self, payload: dict) -> list[dict[str, str]]:
         segments_raw = payload.get("segments")
@@ -68,8 +74,8 @@ class DialogueMixin:
                 {"reply": text, "jp_translation": jp_text, "emotion": emotion}
             ]
 
-        normalized[0]["reply"] = f"“{normalized[0]['reply']}"
-        normalized[-1]["reply"] = f"{normalized[-1]['reply']}”"
+        normalized[0]["reply"] = f"“{self._strip_existing_quotes(normalized[0]['reply'])}"
+        normalized[-1]["reply"] = f"{self._strip_existing_quotes(normalized[-1]['reply'])}”"
         return normalized
 
     def wrapped_lines_for_entries(self, entries: list[str]) -> list[str]:
@@ -141,8 +147,8 @@ class DialogueMixin:
         self.pending_page_turn_before_next_segment = False
         self.current_input = ""
         self.preedit_text = ""
+        self.cursor_caret = 0
         self.chat_state.reset_for_new_input()
-        self._apply_state_flags()
         self.cursor_visible = False
         self.idle_timer.stop()
         self._mark_layout_dirty()
@@ -197,7 +203,6 @@ class DialogueMixin:
 
     def on_reply_ready(self, payload: dict) -> None:
         self.chat_state.begin_reply_output()
-        self._apply_state_flags()
         self.cursor_visible = False
         self.current_dialogue_page_text = ""
         self.current_dialogue_base_line_count = 0
@@ -229,7 +234,6 @@ class DialogueMixin:
     def _after_react(self) -> None:
         if self.current_narration:
             self.chat_state.begin_narration_output()
-            self._apply_state_flags()
             self.current_reply_full = self.current_narration
             self.current_reply_visible = ""
             self.start_text_demote_transition()
@@ -246,7 +250,6 @@ class DialogueMixin:
 
     def on_reply_failed(self, error_text: str) -> None:
         self.chat_state.begin_reply_output()
-        self._apply_state_flags()
         self.cursor_visible = False
         self.current_dialogue_page_text = ""
         self.current_dialogue_base_line_count = 0
@@ -269,7 +272,6 @@ class DialogueMixin:
         self.start_next_reply_segment()
 
     def on_request_finished(self) -> None:
-        self._apply_state_flags()
         self.last_user_message = ""
 
     def will_next_segment_overflow(self) -> bool:
@@ -347,9 +349,8 @@ class DialogueMixin:
             self.current_reply_full = ""
             self.current_reply_visible = ""
 
-            if self.is_outputting_narration:
+            if self.chat_state.is_outputting_narration:
                 self.chat_state.end_narration_output()
-                self._apply_state_flags()
                 self.narration_wait_timer.start(2000)
             else:
                 if self.pending_reply_segments:
@@ -361,7 +362,6 @@ class DialogueMixin:
                         self.chat_state.set_waiting_audio_before_next_segment(
                             True
                         )
-                        self._apply_state_flags()
                     else:
                         self.page_turn_timer.start(SEGMENT_GAP_INTERVAL_MS)
                 elif self.audio_manager.is_playing():
@@ -376,7 +376,7 @@ class DialogueMixin:
             or self.typewriter_timer.isActive()
             or self.page_turn_timer.isActive()
         ):
-            if getattr(self, "waiting_audio_before_next_segment", False):
+            if self.chat_state.waiting_audio_before_next_segment:
                 self.idle_timer.start(ANIMATION_TICK_MS)
             return
 
@@ -396,13 +396,12 @@ class DialogueMixin:
 
     def finish_return_to_idle(self) -> None:
         self.chat_state.return_to_idle("finish_return_to_idle")
-        self._apply_state_flags()
         self.cursor_visible = True
         self.update()
 
     def clear_screen_text(self) -> None:
         if (
-            self.waiting_for_reply
+            self.chat_state.waiting_for_reply
             or self.typewriter_timer.isActive()
             or self.page_turn_timer.isActive()
             or self.animation_timer.isActive()
@@ -412,6 +411,7 @@ class DialogueMixin:
         self.clear_chat_entries()
         self.current_input = ""
         self.preedit_text = ""
+        self.cursor_caret = 0
         self.current_reply_full = ""
         self.current_reply_visible = ""
 
@@ -429,7 +429,6 @@ class DialogueMixin:
         self.pending_idle_after_text_demote = False
 
         self.chat_state.return_to_idle("clear_screen")
-        self._apply_state_flags()
         self.cursor_visible = True
         self._mark_layout_dirty()
         self.update()
@@ -469,7 +468,7 @@ class DialogueMixin:
 
         menu.addSeparator()
 
-        dress_root = CHARACTER_DIR.parent
+        dress_root = CHARACTER_DRESS_DIR
         if dress_root.exists() and dress_root.is_dir():
             dress_menu = menu.addMenu("服装")
             available = sorted([d.name for d in dress_root.iterdir() if d.is_dir()])
@@ -510,10 +509,6 @@ class DialogueMixin:
         updated.current_background = self.settings.current_background
         self.settings = updated
         self.settings_store.save(self.settings)
-        if self.settings.api_key:
-            os.environ[API_KEY_ENV_VAR] = self.settings.api_key
-        else:
-            os.environ.pop(API_KEY_ENV_VAR, None)
         if self.settings.api_base_url:
             os.environ["API_BASE_URL"] = self.settings.api_base_url
         else:

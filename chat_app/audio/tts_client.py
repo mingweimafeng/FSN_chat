@@ -202,13 +202,13 @@ class GenieTTSClient:
                 response = self._session.post(f"{self.base_url}/tts", json=payload, timeout=30, stream=True)
                 response.raise_for_status()
 
-                audio_bytes = b""
+                audio_bytes = bytearray()
                 for chunk in response.iter_content(chunk_size=8192):
-                    audio_bytes += chunk
+                    audio_bytes.extend(chunk)
 
                 if not audio_bytes:
                     raise RuntimeError("Genie TTS 返回了空音频。")
-                return audio_bytes
+                return bytes(audio_bytes)
             except Exception as e:
                 last_error = e
                 if attempt < 2:

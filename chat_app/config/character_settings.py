@@ -6,7 +6,7 @@ from ._helpers import _BASE, _load_character_manifest, _load_text_file
 
 
 # 角色情绪列表。
-CHARACTER_EMOTIONS = ("normal", "happy", "angry", "shy", "flustered", "embarrassed", "flustered", "speechless", "serious", "shocked", "worried", "disguested")
+CHARACTER_EMOTIONS = ("normal", "happy", "angry", "shy", "flustered", "embarrassed", "speechless", "serious", "shocked", "worried", "disgusted")
 STATE_TO_ASSET = {"idle": "idle", "listen": "listen", "speaking": "talk", "react": "react"}
 
 # 角色绘制位置与尺寸比例（全局默认值）。
@@ -21,7 +21,8 @@ _manifest = _load_character_manifest(_BASE)
 _CHARACTER_NAME = _manifest.get("default", "Saber")
 _char_cfg = _manifest.get(_CHARACTER_NAME, {})
 
-CHARACTER_DIR = _BASE / "characters" / _CHARACTER_NAME / "dress" / _char_cfg.get("default_dress", "Casual")
+CHARACTER_DRESS_DIR = _BASE / "characters" / _CHARACTER_NAME / "dress"
+CHARACTER_DIR = CHARACTER_DRESS_DIR / _char_cfg.get("default_dress", "Casual")
 GENIE_CHARACTER_NAME = _char_cfg.get("tts_character_name", _CHARACTER_NAME)
 GENIE_MODEL_LANGUAGE = _char_cfg.get("tts_language", "jp")
 GENIE_REFERENCE_LANGUAGE = _char_cfg.get("tts_reference_language", "jp")
@@ -42,7 +43,7 @@ def get_character_name() -> str:
 
 def load_dress_config(dress_name: str) -> dict[str, float]:
     import json
-    cfg_path = CHARACTER_DIR.parent / "dress_config.json"
+    cfg_path = CHARACTER_DRESS_DIR / "dress_config.json"
     if not cfg_path.exists():
         return _default_dress_config()
     try:

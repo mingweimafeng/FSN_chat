@@ -78,13 +78,25 @@ class TextRenderMixin:
     def cursor_rect(self) -> QRectF:
         if self._cursor_rect_dirty:
             content = self.content_rect()
-            lines = self.all_draw_lines()
-            line = lines[-1] if lines else ""
             metrics = self.text_metrics()
-            x = content.left() + metrics.horizontalAdvance(line)
-            y = content.top() + max(0, len(lines) - 1) * self.line_height()
+            combined = "“" + self.current_input + self.preedit_text + "”"
+            cursor_pos = 1 + self.cursor_caret
+            all_lines = self.all_draw_lines()
+            input_lines = self.wrap_text(combined)
+            dialogue_line_count = max(0, len(all_lines) - len(input_lines))
+            char_count = 0
+            cursor_line = max(0, len(input_lines) - 1)
+            cursor_x = content.left()
+            for i, line in enumerate(input_lines):
+                if char_count + len(line) >= cursor_pos:
+                    cursor_line = i
+                    pos_in_line = cursor_pos - char_count
+                    cursor_x = content.left() + metrics.horizontalAdvance(line[:pos_in_line])
+                    break
+                char_count += len(line)
+            y = content.top() + (dialogue_line_count + cursor_line) * self.line_height()
             self._cursor_rect_cache = QRectF(
-                x, y, max(2.0, metrics.horizontalAdvance(CURSOR_CHAR)), metrics.height()
+                cursor_x, y, max(2.0, metrics.horizontalAdvance(" ")), metrics.height()
             )
             self._cursor_rect_dirty = False
         return QRectF(self._cursor_rect_cache)
@@ -205,7 +217,7 @@ class TextRenderMixin:
             for line in self.wrap_text(input_text):
                 runs.append([(line, 1.0)])
         elif (
-            not self.waiting_for_reply
+            not self.chat_state.waiting_for_reply
             and not self.typewriter_timer.isActive()
             and not self.page_turn_timer.isActive()
         ):
@@ -317,17 +329,19 @@ class TextRenderMixin:
                 if seg_text:
                     self.draw_outlined_text(painter, x, y, seg_text, alpha_factor=seg_alpha)
                     x += metrics.horizontalAdvance(seg_text)
-            if (
-                i == len(line_runs) - 1
-                and self.cursor_visible
-                and not self.reply_output_active
-                and not self.waiting_for_reply
-                and not self.typewriter_timer.isActive()
-                and not self.page_turn_timer.isActive()
-                and not self.animation_timer.isActive()
-            ):
-                self.draw_outlined_text(painter, x, y, CURSOR_CHAR)
             y += self.line_height()
+
+        if (
+            self.cursor_visible
+            and not self.chat_state.reply_output_active
+            and not self.chat_state.waiting_for_reply
+            and not self.typewriter_timer.isActive()
+            and not self.page_turn_timer.isActive()
+            and not self.animation_timer.isActive()
+        ):
+            cr = self.cursor_rect()
+            cursor_y = cr.y() + metrics.ascent()
+            self.draw_outlined_text(painter, cr.x(), cursor_y, CURSOR_CHAR)
 
         if (
             self.current_pixmap.isNull()

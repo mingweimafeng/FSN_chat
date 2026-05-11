@@ -40,10 +40,13 @@ class TtsPipelineManager(QObject):
         for queued_segment, queued_start_when_ready in self._synth_task_queue:
             if queued_segment is segment:
                 if start_when_ready and not queued_start_when_ready:
-                    index = list(self._synth_task_queue).index((queued_segment, queued_start_when_ready))
-                    temp_list = list(self._synth_task_queue)
-                    temp_list[index] = (queued_segment, True)
-                    self._synth_task_queue = deque(temp_list)
+                    new_queue: deque[tuple[dict, bool]] = deque()
+                    for qs, qswr in self._synth_task_queue:
+                        if qs is segment:
+                            new_queue.append((qs, True))
+                        else:
+                            new_queue.append((qs, qswr))
+                    self._synth_task_queue = new_queue
                 return
 
         self._synth_task_queue.append((segment, start_when_ready))

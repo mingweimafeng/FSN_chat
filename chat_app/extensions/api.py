@@ -110,3 +110,10 @@ class BaseExtension(ABC):
     def set_context(self, context: ExtensionContext) -> None:
         """由 ExtensionManager 在加载时调用，注入沙盒上下文。"""
         self._context = context
+
+    def close_overlay(self) -> None:
+        """关闭当前插件展示的覆盖界面（如弹出面板、悬浮岛等）。
+
+        主窗口切换叠加层时调用此方法，插件应在此释放焦点并隐藏自身 UI。
+        默认实现为空，仅需覆盖界面的插件重写此方法。
+        """

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-from chat_app.config import CHARACTER_EMOTIONS, MIN_REPLY_CHARS
+from chat_app.config import CHARACTER_EMOTIONS
 
 
 @dataclass
@@ -49,11 +49,6 @@ class ChatResponseParser:
         emotion = self._normalize_emotion(str(payload.get("emotion", "normal")).strip().lower())
         reply = str(payload.get("reply", "")).strip() or "..."
         jp_translation = str(payload.get("jp_translation", "")).strip() or reply
-
-        if len(reply) < MIN_REPLY_CHARS:
-            reply += " 我会认真回应你，也会把现在的心情和想法说得更完整一些。"
-        if len(jp_translation) < MIN_REPLY_CHARS:
-            jp_translation += " もっと丁寧に、今の気持ちと考えをきちんと伝えるね。"
 
         segments = self._parse_segments(payload.get("segments"), emotion, reply, jp_translation)
         return ParsedChatResponse(

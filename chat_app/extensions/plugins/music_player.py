@@ -175,6 +175,13 @@ class MusicPlayerExtension(BaseExtension):
         if self._drawer:
             self._drawer.deleteLater()
 
+    @property
+    def is_showing(self) -> bool:
+        return self._is_showing
+
+    def close_overlay(self) -> None:
+        self._slide_up()
+
     def _scan_music(self) -> None:
         music_dir = MUSIC_DIR
         if not music_dir.exists():

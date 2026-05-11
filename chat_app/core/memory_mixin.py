@@ -31,7 +31,7 @@ class MemoryMixin:
                 )
         return messages
 
-    def _recent_turns_for_summary(self) -> list[dict[str, str]]:
+    def _recent_turns_for_summary(self: "WindowProtocol") -> list[dict[str, str]]:
         turns: list[dict[str, str]] = []
         for record in self.history_store.get_recent_turns(
             MEMORY_L2_RECENT_TURNS, chronological=True

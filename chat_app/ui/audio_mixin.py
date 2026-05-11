@@ -56,9 +56,8 @@ class AudioMixin:
             self.start_segment_after_audio_ready(segment)
 
     def _on_audio_manager_finished(self) -> None:
-        if self.waiting_audio_before_next_segment:
+        if self.chat_state.waiting_audio_before_next_segment:
             self.chat_state.set_waiting_audio_before_next_segment(False)
-            self._apply_state_flags()
             self.page_turn_timer.start(SEGMENT_GAP_INTERVAL_MS)
             return
 

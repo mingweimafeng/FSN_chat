@@ -140,3 +140,18 @@ class ExtensionManager:
     def active_extensions(self) -> list[BaseExtension]:
         """当前激活的插件只读列表。"""
         return list(self._extensions)
+
+    def get_extension(self, name: str) -> BaseExtension | None:
+        """按名称查找已加载的插件实例，未找到时返回 None。"""
+        for ext in self._extensions:
+            if ext.name == name:
+                return ext
+        return None
+
+    def close_overlay(self) -> None:
+        """关闭所有激活插件中实现了 overlay 界面的弹出层。"""
+        for ext in self._extensions:
+            try:
+                ext.close_overlay()
+            except AttributeError:
+                pass

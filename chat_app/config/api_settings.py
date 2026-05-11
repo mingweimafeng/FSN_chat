@@ -4,18 +4,18 @@ import os
 
 
 # 大模型最小回复字数保护。
-MIN_REPLY_CHARS = 30
+MIN_REPLY_CHARS = 0
 
 # OpenAI 兼容接口配置（默认使用 DeepSeek）。
 API_BASE_URL = os.getenv("API_BASE_URL", "https://api.deepseek.com")
-API_MODEL = os.getenv("API_MODEL", "deepseek-v4-flash")
+API_MODEL = os.getenv("API_MODEL", "deepseek-chat")
 API_KEY_ENV_VAR = "API_KEY"
 
 PROVIDERS = {
     "deepseek": {
         "name": "DeepSeek",
         "base_url": "https://api.deepseek.com",
-        "default_model": "deepseek-v4-flash",
+        "default_model": "deepseek-chat",
     },
     "openai": {
         "name": "OpenAI",
